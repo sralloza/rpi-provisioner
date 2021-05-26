@@ -8,34 +8,34 @@ from config import settings
 
 env = settings
 config = Config(
-    overrides={"sudo": {"password": settings.password}, "run": {"hide": True}}
+    overrides={
+        "sudo": {"password": settings.initial_login_password},
+        # "run": {"hide": True},
+    }
 )
 
 
 def main():
     con = Connection(
         host=env.host,
-        user=env.login_user,
-        connect_kwargs={"password": env.password},
+        user=env.initial_login_user,
+        connect_kwargs={"password": env.initial_login_password},
         config=config,
     )
-    # start_provision(con)
-    return update_keys(con, env.login_user)
-    r = con.sudo("cat /root/a")
-    print(repr(r))
-    print(repr(r.stdout.strip()))
+    start_provision(con)
 
 
 def start_provision(con: Connection):
     ensure_local_keys(con)
     setup_sshd_config(con)
-    update_keys(con)
 
     create_deployer_group(con)
     create_deployer_user(con)
+    update_keys(con)
+    print("Done")
+    return
     install_ansible_dependencies(con)
 
-    con.run("service sshd reload")
     upgrade_server(con)
 
 
@@ -56,36 +56,51 @@ def ensure_local_keys(con: Connection):
 
 
 def setup_sshd_config(con: Connection):
-    # Prevent root SSHing into the remote server
-    con.run('sed "/etc/ssh/sshd_config" "^UsePAM yes" "UsePAM no"')
-    con.run('sed "/etc/ssh/sshd_config" "^PermitRootLogin yes" "PermitRootLogin no"')
+    config = "/etc/ssh/sshd_config"
+    con.run(f"sed -i 's/^UsePAM yes/UsePAM no/' {config}")
+    con.run(f"sed -i 's/^PermitRootLogin yes/PermitRootLogin no/' {config}")
     con.run(
-        'sed "/etc/ssh/sshd_config" "^#PasswordAuthentication yes" "PasswordAuthentication no"'
+        f"sed -i 's/^#PasswordAuthentication yes/PasswordAuthentication no/' {config}"
     )
+    con.run("service ssh reload")
 
 
 def create_deployer_group(con: Connection):
-    con.run("groupadd {}".format(env.user_group))
-    con.run("mv /etc/sudoers /etc/sudoers-backup")
+    print("Creating deployer group")
+    con.run("groupadd {}".format(env.deployer_group))
+    if con.run("test -f /etc/sudoers", warn=True).failed:
+        print("Creating /etc/sudoers")
+        con.run("touch /etc/sudoers")
+    else:
+        print("Creating backup of /etc/sudoers")
+        con.run("mv /etc/sudoers /etc/sudoers-backup")
+
     con.run(
-        f'(cat /etc/sudoers-backup; echo "%{env.user_group} ALL=(ALL) ALL") > /etc/sudoers'
+        f'(cat /etc/sudoers-backup; echo "%{env.deployer_group} ALL=(ALL) ALL") > /etc/sudoers'
     )
     con.run("chmod 440 /etc/sudoers")
 
 
 def create_deployer_user(con: Connection):
+    print("Creating deployer user")
     con.run(
-        'adduser -c "{.full_name_user}" -m -g {.user_group} {.user_name}'.format(env)
+        f"adduser --gecos '{env.full_name_user}' --disabled-password --ingroup {env.deployer_group} {env.deployer_user}"
     )
-    con.run("passwd {}".format(env.user_name))
-    con.run("usermod -a -G {} {}".format(env.user_group, env.user_name))
-    con.run("mkdir /home/{}/.ssh".format(env.user_name))
-    con.run("chown -R {} /home/{}/.ssh".format(env.user_name, env.user_name))
-    con.run("chgrp -R {} /home/{}/.ssh".format(env.user_group, env.user_name))
+    print("Setting password...")
+    con.run(f"echo {env.deployer_user}:{env.deployer_password} | chpasswd")
+    print("Password set")
+    con.run("usermod -a -G {} {}".format(env.deployer_group, env.deployer_user))
+    con.run("mkdir /home/{}/.ssh".format(env.deployer_user))
+    con.run("chown -R {} /home/{}/.ssh".format(env.deployer_user, env.deployer_user))
+    con.run(
+        "chgrp -R {} /home/{}/.ssh".format(env.deployer_group, env.deployer_user)
+    )
 
 
-def update_keys(con: Connection, user: str):
+def update_keys(con: Connection):
+    print("Updating keys")
     public_key_path = Path.home() / ".ssh/id_rsa.pub"
+    user = env.deployer_user
 
     if user == "root":
         authorized_keys_path = f"/root/.ssh/authorized_keys"
@@ -112,10 +127,15 @@ def update_keys(con: Connection, user: str):
 
     if new_current_keys != current_keys:
         print("Updating authorized_keys")
-        authorized_keys = "\n".join(new_current_keys)
+        authorized_keys = "\n".join(new_current_keys) + "\n"
         Path("tmp").write_text(authorized_keys, "utf8")
         con.put("tmp", authorized_keys_path)
         Path("tmp").unlink()
+
+    print("Fixing permissions of .ssh files")
+    con.run(f"chmod 700 {ssh_folder}")
+    con.run(f"chmod 600 {authorized_keys_path}")
+    con.run(f"chown {env.deployer_user}:{env.deployer_password} {authorized_keys_path}")
 
 
 def install_ansible_dependencies(con: Connection):
@@ -125,10 +145,15 @@ def install_ansible_dependencies(con: Connection):
 
 def upgrade_server(con: Connection):
     # TODO: fix distro
-    con.run("dnf upgrade -y")
+    con.run("apt-get update")
+    con.run("apt-get upgrade -y")
+    # con.run("apt-get install sudo")
+
     # optional command (necessary for Fedora 25)
-    con.run("dnf install -y python")
-    con.run("reboot")
+    con.run("apt install -y python")
+
+    # TODO: uncomment in prod
+    # con.run("reboot")
 
 
 if __name__ == "__main__":
