@@ -13,9 +13,14 @@ config = Config(
 
 
 def main():
-    con = Connection("rfenix", config=config)
+    con = Connection(
+        host=env.host,
+        user=env.login_user,
+        connect_kwargs={"password": env.password},
+        config=config,
+    )
     # start_provision(con)
-    return update_keys(con)
+    return update_keys(con, env.login_user)
     r = con.sudo("cat /root/a")
     print(repr(r))
     print(repr(r.stdout.strip()))
@@ -79,11 +84,19 @@ def create_deployer_user(con: Connection):
     con.run("chgrp -R {} /home/{}/.ssh".format(env.user_group, env.user_name))
 
 
-def update_keys(con: Connection):
+def update_keys(con: Connection, user: str):
     public_key_path = Path.home() / ".ssh/id_rsa.pub"
-    authorized_keys_path = f"/home/{env.user}/.ssh/authorized_keys"
+
+    if user == "root":
+        authorized_keys_path = f"/root/.ssh/authorized_keys"
+        ssh_folder = f"/root/.ssh"
+    else:
+        authorized_keys_path = f"/home/{user}/.ssh/authorized_keys"
+        ssh_folder = f"/home/{user}/.ssh"
 
     public_key = public_key_path.read_text("utf8").strip()
+
+    con.run(f'mkdir -p "{ssh_folder}"')
 
     try:
         result = con.run(f"cat {authorized_keys_path}")
@@ -103,6 +116,7 @@ def update_keys(con: Connection):
         Path("tmp").write_text(authorized_keys, "utf8")
         con.put("tmp", authorized_keys_path)
         Path("tmp").unlink()
+
 
 def install_ansible_dependencies(con: Connection):
     # TODO: fix distro
