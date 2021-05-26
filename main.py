@@ -1,24 +1,56 @@
-from fabric import Connection
+import os
 from pathlib import Path
+
+from fabric import Connection, Config
+from invoke.exceptions import UnexpectedExit
+
 from config import settings
 
 env = settings
+config = Config(
+    overrides={"sudo": {"password": settings.password}, "run": {"hide": True}}
+)
 
 
 def main():
-    con = Connection("rfenix")
-    start_provision(con)
+    con = Connection("rfenix", config=config)
+    # start_provision(con)
+    return update_keys(con)
+    r = con.sudo("cat /root/a")
+    print(repr(r))
+    print(repr(r.stdout.strip()))
 
 
 def start_provision(con: Connection):
-    """
-    Start server provisioning
-    """
-    # Create a new directory for a new remote server
-    ssh_keys_name = env.ssh_keys_dir / "fenix_prod_key"
-    if not ssh_keys_name.is_file():
-        con.local("ssh-keygen -t rsa -b 2048 -f {0} -N \"\"".format(ssh_keys_name))
+    ensure_local_keys(con)
+    setup_sshd_config(con)
+    update_keys(con)
 
+    create_deployer_group(con)
+    create_deployer_user(con)
+    install_ansible_dependencies(con)
+
+    con.run("service sshd reload")
+    upgrade_server(con)
+
+
+def ensure_local_keys(con: Connection):
+    ssh_folder = Path.home() / ".ssh"
+    private_key = ssh_folder / "id_rsa"
+    public_key = ssh_folder / "id_rsa.pub"
+
+    os.makedirs(ssh_folder, exist_ok=True)
+
+    current_files = sum([private_key.is_file(), public_key.is_file()])
+
+    if not current_files in (0, 2):
+        raise RuntimeError(f"Invalid key state ({current_files})")
+
+    if current_files == 0:
+        con.local('ssh-keygen -t rsa -b 2048 -f {0} -N ""'.format(private_key))
+
+
+def setup_sshd_config(con: Connection):
     # Prevent root SSHing into the remote server
     con.run('sed "/etc/ssh/sshd_config" "^UsePAM yes" "UsePAM no"')
     con.run('sed "/etc/ssh/sshd_config" "^PermitRootLogin yes" "PermitRootLogin no"')
@@ -26,37 +58,19 @@ def start_provision(con: Connection):
         'sed "/etc/ssh/sshd_config" "^#PasswordAuthentication yes" "PasswordAuthentication no"'
     )
 
-    install_ansible_dependencies(con)
-    create_deployer_group(con)
-    create_deployer_user(con)
-    upload_keys(con)
-    set_selinux_permissive(con)
-    con.run("service sshd reload")
-    upgrade_server(con)
-
 
 def create_deployer_group(con: Connection):
-    """
-    Create a user group for all project developers
-    """
     con.run("groupadd {}".format(env.user_group))
     con.run("mv /etc/sudoers /etc/sudoers-backup")
     con.run(
-        '(cat /etc/sudoers-backup; echo "%'
-        + env.user_group
-        + ' ALL=(ALL) ALL") > /etc/sudoers'
+        f'(cat /etc/sudoers-backup; echo "%{env.user_group} ALL=(ALL) ALL") > /etc/sudoers'
     )
     con.run("chmod 440 /etc/sudoers")
 
 
 def create_deployer_user(con: Connection):
-    """
-    Create a user for the user group
-    """
     con.run(
-        'adduser -c "{}" -m -g {} {}'.format(
-            env.full_name_user, env.user_group, env.user_name
-        )
+        'adduser -c "{.full_name_user}" -m -g {.user_group} {.user_name}'.format(env)
     )
     con.run("passwd {}".format(env.user_name))
     con.run("usermod -a -G {} {}".format(env.user_group, env.user_name))
@@ -65,37 +79,37 @@ def create_deployer_user(con: Connection):
     con.run("chgrp -R {} /home/{}/.ssh".format(env.user_group, env.user_name))
 
 
-def upload_keys(con: Connection):
-    """
-    Upload the SSH public/private keys to the remote server via scp
-    """
-    scp_command = "scp {} {}/authorized_keys {}@{}:~/.ssh".format(
-        env.ssh_keys_name + ".pub", env.ssh_keys_dir, env.user_name, env.host_string
-    )
-    con.local(scp_command)
+def update_keys(con: Connection):
+    public_key_path = Path.home() / ".ssh/id_rsa.pub"
+    authorized_keys_path = f"/home/{env.user}/.ssh/authorized_keys"
 
+    public_key = public_key_path.read_text("utf8").strip()
+
+    try:
+        result = con.run(f"cat {authorized_keys_path}")
+        current_keys = result.stdout.strip().splitlines()
+    except UnexpectedExit:
+        current_keys = []
+
+    current_keys.sort()
+    new_current_keys = [x for x in current_keys if not x.startswith("#")]
+    new_current_keys.append(public_key)
+    new_current_keys = list(set(new_current_keys))
+    new_current_keys.sort()
+
+    if new_current_keys != current_keys:
+        print("Updating authorized_keys")
+        authorized_keys = "\n".join(new_current_keys)
+        Path("tmp").write_text(authorized_keys, "utf8")
+        con.put("tmp", authorized_keys_path)
+        Path("tmp").unlink()
 
 def install_ansible_dependencies(con: Connection):
-    """
-    Install the python-dnf module so that Ansible
-    can communicate with Fedora's Package Manager
-    """
     # TODO: fix distro
     con.run("dnf install -y python-dnf")
 
 
-def set_selinux_permissive(con: Connection):
-    """
-    Set SELinux to Permissive/Disabled Mode
-    """
-    # for permissive
-    con.run("sudo setenforce 0")
-
-
 def upgrade_server(con: Connection):
-    """
-    Upgrade the server as a root user
-    """
     # TODO: fix distro
     con.run("dnf upgrade -y")
     # optional command (necessary for Fedora 25)
