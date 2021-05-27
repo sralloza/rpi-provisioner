@@ -2,10 +2,13 @@ from pydantic import BaseConfig
 
 
 class Settings(BaseConfig):
+    # host: str = "192.168.1.93"
     host: str = "localhost"
 
-    initial_login_user: str = "root"
-    initial_login_password: str = "password"
+    initial_login_user: str = "pi"
+    initial_login_password: str = "raspberry"
+
+    root_password: str = "rootp"
 
     deployer_user: str = "deployer"
     deployer_password: str = "deployer"
