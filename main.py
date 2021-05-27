@@ -1,7 +1,8 @@
 import os
 from pathlib import Path
 
-from fabric import Connection, Config
+import click
+from fabric import Config, Connection
 from invoke.exceptions import UnexpectedExit
 
 from config import settings
@@ -25,18 +26,65 @@ def main():
     start_provision(con)
 
 
+def info(msg):
+    click.secho(msg, fg="bright_green")
+
+
 def start_provision(con: Connection):
-    ensure_local_keys(con)
-    setup_sshd_config(con)
+    con.sudo("whoami")
 
     create_deployer_group(con)
     create_deployer_user(con)
-    update_keys(con)
-    print("Done")
-    return
-    install_ansible_dependencies(con)
 
-    upgrade_server(con)
+    ensure_local_keys(con)
+    update_keys(con)
+    setup_sshd_config(con)
+
+    install_libraries(con)
+
+    info("Done")
+
+
+def create_deployer_group(con: Connection):
+    info("Creating deployer group")
+    if con.run(f"grep -q {env.deployer_group} /etc/group", warn=True).ok:
+        info("Deployer group already exists")
+    else:
+        con.sudo(f"groupadd {env.deployer_group}")
+
+    # current_sudoers = con.sudo("cat /etc/sudoers").stdout.strip()
+    con.sudo("cp /etc/sudoers /etc/sudoers.backup")
+
+    info("Updating sudoers file")
+    # TODO: implement in prod
+    # con.sudo("echo 'foobar ALL=(ALL:ALL) ALL' >> /etc/sudoers")
+
+    # sudoers = current_sudoers + f"\n\n%{env.deployer_group} ALL=(ALL) ALL\n"
+
+    # Path("tmp").write_text(sudoers, "utf8")
+    # con.put("tmp", "/tmp/sudoers")
+    # con.sudo("chown root:root /tmp/sudoers")
+    # con.sudo("chmod 440 /tmp/sudoers")
+    # con.sudo(f"mv /tmp/sudoers /etc/sudoers")
+    # Path("tmp").unlink()
+
+
+def create_deployer_user(con: Connection):
+    info("Creating deployer user")
+    if con.run(f"id {env.deployer_user}", warn=True).ok:
+        return info("Deployer user already exists")
+
+    password = env.deployer_password
+    info(password)
+
+    con.sudo(
+        f"useradd -m -c '{env.full_name_user}' "
+        f"-g {env.deployer_group} -p {password} {env.deployer_user}"
+    )
+    con.sudo("usermod -a -G {} {}".format(env.deployer_group, env.deployer_user))
+    con.sudo("mkdir /home/{}/.ssh".format(env.deployer_user))
+    con.sudo("chown -R {} /home/{}/.ssh".format(env.deployer_user, env.deployer_user))
+    con.sudo("chgrp -R {} /home/{}/.ssh".format(env.deployer_group, env.deployer_user))
 
 
 def ensure_local_keys(con: Connection):
@@ -55,50 +103,8 @@ def ensure_local_keys(con: Connection):
         con.local('ssh-keygen -t rsa -b 2048 -f {0} -N ""'.format(private_key))
 
 
-def setup_sshd_config(con: Connection):
-    config = "/etc/ssh/sshd_config"
-    con.run(f"sed -i 's/^UsePAM yes/UsePAM no/' {config}")
-    con.run(f"sed -i 's/^PermitRootLogin yes/PermitRootLogin no/' {config}")
-    con.run(
-        f"sed -i 's/^#PasswordAuthentication yes/PasswordAuthentication no/' {config}"
-    )
-    con.run("service ssh reload")
-
-
-def create_deployer_group(con: Connection):
-    print("Creating deployer group")
-    con.run("groupadd {}".format(env.deployer_group))
-    if con.run("test -f /etc/sudoers", warn=True).failed:
-        print("Creating /etc/sudoers")
-        con.run("touch /etc/sudoers")
-    else:
-        print("Creating backup of /etc/sudoers")
-        con.run("mv /etc/sudoers /etc/sudoers-backup")
-
-    con.run(
-        f'(cat /etc/sudoers-backup; echo "%{env.deployer_group} ALL=(ALL) ALL") > /etc/sudoers'
-    )
-    con.run("chmod 440 /etc/sudoers")
-
-
-def create_deployer_user(con: Connection):
-    print("Creating deployer user")
-    con.run(
-        f"adduser --gecos '{env.full_name_user}' --disabled-password --ingroup {env.deployer_group} {env.deployer_user}"
-    )
-    print("Setting password...")
-    con.run(f"echo {env.deployer_user}:{env.deployer_password} | chpasswd")
-    print("Password set")
-    con.run("usermod -a -G {} {}".format(env.deployer_group, env.deployer_user))
-    con.run("mkdir /home/{}/.ssh".format(env.deployer_user))
-    con.run("chown -R {} /home/{}/.ssh".format(env.deployer_user, env.deployer_user))
-    con.run(
-        "chgrp -R {} /home/{}/.ssh".format(env.deployer_group, env.deployer_user)
-    )
-
-
 def update_keys(con: Connection):
-    print("Updating keys")
+    info("Updating keys")
     public_key_path = Path.home() / ".ssh/id_rsa.pub"
     user = env.deployer_user
 
@@ -111,7 +117,7 @@ def update_keys(con: Connection):
 
     public_key = public_key_path.read_text("utf8").strip()
 
-    con.run(f'mkdir -p "{ssh_folder}"')
+    con.sudo(f'mkdir -p "{ssh_folder}"')
 
     try:
         result = con.run(f"cat {authorized_keys_path}")
@@ -126,34 +132,65 @@ def update_keys(con: Connection):
     new_current_keys.sort()
 
     if new_current_keys != current_keys:
-        print("Updating authorized_keys")
+        info("Updating authorized_keys")
         authorized_keys = "\n".join(new_current_keys) + "\n"
         Path("tmp").write_text(authorized_keys, "utf8")
-        con.put("tmp", authorized_keys_path)
+        con.put("tmp", "/tmp/authorized_keys")
+        con.sudo(f"mv /tmp/authorized_keys {authorized_keys_path}")
         Path("tmp").unlink()
 
-    print("Fixing permissions of .ssh files")
-    con.run(f"chmod 700 {ssh_folder}")
-    con.run(f"chmod 600 {authorized_keys_path}")
-    con.run(f"chown {env.deployer_user}:{env.deployer_password} {authorized_keys_path}")
+    info("Fixing permissions of user's .ssh files")
+    con.sudo(f"chmod 700 {ssh_folder}")
+    con.sudo(f"chmod 600 {authorized_keys_path}")
+
+    ownership = f"{env.deployer_user}:{env.deployer_password}"
+    con.sudo(f"chown {ownership} {ssh_folder}")
+    con.sudo(f"chown {ownership} {authorized_keys_path}")
 
 
-def install_ansible_dependencies(con: Connection):
-    # TODO: fix distro
-    con.run("dnf install -y python-dnf")
+def setup_sshd_config(con: Connection):
+    config = "/etc/ssh/sshd_config"
+    con.sudo(f"cp {config} {config}.backup")
+    con.sudo(f"sed -i 's/^UsePAM yes/UsePAM no/' {config}")
+    con.sudo(f"sed -i 's/^PermitRootLogin yes/PermitRootLogin no/' {config}")
+    con.sudo(
+        f"sed -i 's/^#PasswordAuthentication yes/PasswordAuthentication no/' {config}"
+    )
+    con.sudo("service ssh reload")
 
 
-def upgrade_server(con: Connection):
-    # TODO: fix distro
-    con.run("apt-get update")
-    con.run("apt-get upgrade -y")
-    # con.run("apt-get install sudo")
+def install_libraries(con: Connection):
+    con.sudo("apt-get update")
+    con.sudo("apt-get upgrade -y")
 
-    # optional command (necessary for Fedora 25)
-    con.run("apt install -y python")
+    libraries = ("build-essential", "cmake", "curl", "git", "nano", "python3")
+    con.sudo(f"apt-get install {' '.join(libraries)} -y")
 
-    # TODO: uncomment in prod
-    # con.run("reboot")
+    install_fish(con)
+    install_docker(con)
+
+
+def install_fish(con: Connection):
+    con.run(
+        "SUDO_ASKPASS='adsf' echo 'deb http://download.opensuse.org/repositories/shells:/fish:/release:/3/Debian_10/ /' | sudo tee /etc/apt/sources.list.d/shells:fish:release:3.list"
+    )
+    con.run(
+        "SUDO_ASKPASS='adsf' curl -fsSL https://download.opensuse.org/repositories/shells:fish:release:3/Debian_10/Release.key | gpg --dearmor | sudo tee /  etc/apt/trusted.gpg.d/shells_fish_release_3.gpg > /dev/null"
+    )
+    con.sudo("apt install fish -y")
+
+    # Oh My Fish
+    con.run("curl -L https://get.oh-my.fish | fish")
+    con.run("omf install angoster")
+    con.run("omf theme agnoster")
+    con.run("omf install bang-bang")
+
+
+def install_docker(con: Connection):
+    con.run("curl -fsSL https://get.docker.com -o /tmp/get-docker.sh")
+    con.sudo("sh /tmp/get-docker.sh")
+    con.run("rm /tmp/get-docker.sh")
+    con.sudo(f"usermod -aG docker {env.deployer_user}")
 
 
 if __name__ == "__main__":
