@@ -1,39 +1,72 @@
 import os
 from pathlib import Path
+from time import sleep
 
 import click
 from fabric import Config, Connection
 from invoke.exceptions import UnexpectedExit
+from paramiko.ssh_exception import BadAuthenticationType
 from passlib.context import CryptContext
 
 from config import settings
 
 env = settings
-config = Config(
+config1 = Config(
     overrides={
         "sudo": {"password": settings.initial_login_password},
         # "run": {"hide": True},
     }
 )
+config2 = Config(
+    overrides={
+        "sudo": {"password": settings.initial_login_password},
+        "run": {"shell": "/usr/bin/fish"},
+    }
+)
 
 
 def main():
-    con = Connection(
+    con1 = Connection(
         host=env.host,
         user=env.initial_login_user,
         connect_kwargs={"password": env.initial_login_password},
-        config=config,
+        config=config1,
     )
-    start_provision(con)
+    con2 = Connection(
+        host=env.host,
+        user=env.deployer_user,
+        config=config1,
+    )
+    con3 = Connection(
+        host=env.host,
+        user=env.deployer_user,
+        config=config2,
+    )
+
+    try:
+        with con1 as con:
+            con.sudo("whoami")
+            setup_deployer(con)
+    except BadAuthenticationType as exc:
+        if exc.allowed_types != ["publickey"]:
+            raise
+        info("First login failed, deployer should be already created")
+
+    sleep(1)
+    with con2 as con:
+        con.sudo("whoami")
+        setup_server(con)
+
+    with con3 as con:
+        con.sudo("whoami")
+        deploy_services(con)
 
 
 def info(msg):
     click.secho(msg, fg="bright_green")
 
 
-def start_provision(con: Connection):
-    con.sudo("whoami")
-
+def setup_deployer(con: Connection):
     create_deployer_group(con)
     create_deployer_user(con)
 
@@ -41,6 +74,8 @@ def start_provision(con: Connection):
     update_keys(con)
     setup_sshd_config(con)
 
+
+def setup_server(con: Connection):
     install_libraries(con)
 
     info("Done")
@@ -168,7 +203,15 @@ def install_libraries(con: Connection):
     con.sudo("apt-get update")
     con.sudo("apt-get upgrade -y")
 
-    libraries = ("build-essential", "cmake", "curl", "git", "nano", "python3")
+    libraries = (
+        "build-essential",
+        "cmake",
+        "curl",
+        "git",
+        "nano",
+        "python3",
+        "python3-pip",
+    )
     con.sudo(f"apt-get install {' '.join(libraries)} -y")
 
     install_fish(con)
@@ -180,15 +223,21 @@ def install_fish(con: Connection):
         "echo 'deb http://download.opensuse.org/repositories/shells:/fish:/release:/3/Debian_10/ /' | sudo tee /etc/apt/sources.list.d/shells:fish:release:3.list"
     )
     con.run(
-        "curl -fsSL https://download.opensuse.org/repositories/shells:fish:release:3/Debian_10/Release.key | gpg --dearmor | sudo tee /  etc/apt/trusted.gpg.d/shells_fish_release_3.gpg > /dev/null"
+        "curl -fsSL https://download.opensuse.org/repositories/shells:fish:release:3/Debian_10/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/shells_fish_release_3.gpg > /dev/null"
     )
+    con.sudo("apt update")
     con.sudo("apt install fish -y")
 
+    con.sudo(f"chsh -s /usr/bin/fish {env.deployer_user}")
+
     # Oh My Fish
-    con.run("curl -L https://get.oh-my.fish | fish")
-    con.run("omf install angoster")
-    con.run("omf theme agnoster")
-    con.run("omf install bang-bang")
+    con.run("curl -L https://get.oh-my.fish > /tmp/omf.sh")
+    con.run("fish /tmp/omf.sh --noninteractive")
+    con.run("rm /tmp/omf.sh")
+    con.run("ps")
+    con.run("echo omf install agnoster | fish")
+    con.run("echo omf theme agnoster | fish")
+    con.run("echo omf install bang-bang | fish")
 
 
 def install_docker(con: Connection):
@@ -196,7 +245,12 @@ def install_docker(con: Connection):
     con.sudo("sh /tmp/get-docker.sh")
     con.run("rm /tmp/get-docker.sh")
     con.sudo(f"usermod -aG docker {env.deployer_user}")
+    con.run("python3 -m pip install docker-compose")
+    con.run(f"echo fish_add_path /home/{env.deployer_user}/.local/bin/ | fish")
 
+
+def deploy_services(con: Connection):
+    con.run(f"git clone https://{env.github_token}@github.com/sralloza/services.git /srv")
 
 if __name__ == "__main__":
     main()
