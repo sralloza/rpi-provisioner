@@ -4,6 +4,7 @@ from pathlib import Path
 import click
 from fabric import Config, Connection
 from invoke.exceptions import UnexpectedExit
+from passlib.context import CryptContext
 
 from config import settings
 
@@ -52,21 +53,24 @@ def create_deployer_group(con: Connection):
     else:
         con.sudo(f"groupadd {env.deployer_group}")
 
-    # current_sudoers = con.sudo("cat /etc/sudoers").stdout.strip()
+    current_sudoers = con.sudo("cat /etc/sudoers").stdout.strip()
     con.sudo("cp /etc/sudoers /etc/sudoers.backup")
 
     info("Updating sudoers file")
-    # TODO: implement in prod
-    # con.sudo("echo 'foobar ALL=(ALL:ALL) ALL' >> /etc/sudoers")
 
-    # sudoers = current_sudoers + f"\n\n%{env.deployer_group} ALL=(ALL) ALL\n"
+    # TODO: only allow to run sudo tee without password
+    sudoers = current_sudoers + f"\n\n%{env.deployer_group} ALL=(ALL) NOPASSWD: ALL\n"
 
-    # Path("tmp").write_text(sudoers, "utf8")
-    # con.put("tmp", "/tmp/sudoers")
-    # con.sudo("chown root:root /tmp/sudoers")
-    # con.sudo("chmod 440 /tmp/sudoers")
-    # con.sudo(f"mv /tmp/sudoers /etc/sudoers")
-    # Path("tmp").unlink()
+    Path("tmp").write_text(sudoers, "utf8")
+    con.put("tmp", "/tmp/sudoers")
+    con.sudo("chown root:root /tmp/sudoers")
+    con.sudo("chmod 440 /tmp/sudoers")
+    con.sudo("sed 's/^M$//' -i /tmp/sudoers")
+    con.sudo(f"mv /tmp/sudoers /etc/sudoers")
+    Path("tmp").unlink()
+
+    # Check that sudo is not broken due to sudoers file
+    con.sudo("whoami")
 
 
 def create_deployer_user(con: Connection):
@@ -74,12 +78,12 @@ def create_deployer_user(con: Connection):
     if con.run(f"id {env.deployer_user}", warn=True).ok:
         return info("Deployer user already exists")
 
-    password = env.deployer_password
+    password = CryptContext(schemes=["sha256_crypt"]).hash(env.deployer_password)
     info(password)
 
     con.sudo(
-        f"useradd -m -c '{env.full_name_user}' "
-        f"-g {env.deployer_group} -p {password} {env.deployer_user}"
+        f"useradd -m -c '{env.full_name_user}' -s /bin/bash "
+        f"-g {env.deployer_group} -p '{password}' {env.deployer_user}"
     )
     con.sudo("usermod -a -G {} {}".format(env.deployer_group, env.deployer_user))
     con.sudo("mkdir /home/{}/.ssh".format(env.deployer_user))
@@ -100,6 +104,7 @@ def ensure_local_keys(con: Connection):
         raise RuntimeError(f"Invalid key state ({current_files})")
 
     if current_files == 0:
+        info("Creating local ssh keys")
         con.local('ssh-keygen -t rsa -b 2048 -f {0} -N ""'.format(private_key))
 
 
@@ -172,10 +177,10 @@ def install_libraries(con: Connection):
 
 def install_fish(con: Connection):
     con.run(
-        "SUDO_ASKPASS='adsf' echo 'deb http://download.opensuse.org/repositories/shells:/fish:/release:/3/Debian_10/ /' | sudo tee /etc/apt/sources.list.d/shells:fish:release:3.list"
+        "echo 'deb http://download.opensuse.org/repositories/shells:/fish:/release:/3/Debian_10/ /' | sudo tee /etc/apt/sources.list.d/shells:fish:release:3.list"
     )
     con.run(
-        "SUDO_ASKPASS='adsf' curl -fsSL https://download.opensuse.org/repositories/shells:fish:release:3/Debian_10/Release.key | gpg --dearmor | sudo tee /  etc/apt/trusted.gpg.d/shells_fish_release_3.gpg > /dev/null"
+        "curl -fsSL https://download.opensuse.org/repositories/shells:fish:release:3/Debian_10/Release.key | gpg --dearmor | sudo tee /  etc/apt/trusted.gpg.d/shells_fish_release_3.gpg > /dev/null"
     )
     con.sudo("apt install fish -y")
 

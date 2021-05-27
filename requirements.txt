@@ -19,6 +19,8 @@ invoke==1.5.0
     # via fabric
 paramiko==2.7.2
     # via fabric
+passlib==1.7.4
+    # via -r requirements.in
 pathlib2==2.3.5
     # via fabric
 pycparser==2.20
