@@ -94,17 +94,19 @@ def create_deployer_group(con: Connection):
     info("Updating sudoers file")
 
     # TODO: only allow to run sudo tee without password
-    sudoers = current_sudoers + f"\n\n%{env.deployer_group} ALL=(ALL) NOPASSWD: ALL\n"
+    sudoers = current_sudoers + f"\n\n{env.deployer_group} ALL=(ALL) NOPASSWD: ALL\n"
+    sudoers = sudoers.encode("utf8").replace(b'\r\n', b'\n')
 
-    Path("tmp").write_text(sudoers, "utf8")
-    con.put("tmp", "/tmp/sudoers")
+
+    Path("sudoers.tmp").write_bytes(sudoers)
+    con.put("sudoers.tmp", "/tmp/sudoers")
     con.sudo("chown root:root /tmp/sudoers")
     con.sudo("chmod 440 /tmp/sudoers")
-    con.sudo("sed 's/^M$//' -i /tmp/sudoers")
     con.sudo(f"mv /tmp/sudoers /etc/sudoers")
-    Path("tmp").unlink()
+    Path("sudoers.tmp").unlink()
 
     # Check that sudo is not broken due to sudoers file
+    con.run("whoami")
     con.sudo("whoami")
 
 
