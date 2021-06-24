@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     full_name_user: str = "Deployer"
 
     github_token: str
+    production: bool = False
 
 
 settings = Settings()
