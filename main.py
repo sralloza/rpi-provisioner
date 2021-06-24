@@ -95,8 +95,7 @@ def create_deployer_group(con: Connection):
 
     # TODO: only allow to run sudo tee without password
     sudoers = current_sudoers + f"\n\n{env.deployer_group} ALL=(ALL) NOPASSWD: ALL\n"
-    sudoers = sudoers.encode("utf8").replace(b'\r\n', b'\n')
-
+    sudoers = sudoers.encode("utf8").replace(b"\r\n", b"\n")
 
     Path("sudoers.tmp").write_bytes(sudoers)
     con.put("sudoers.tmp", "/tmp/sudoers")
@@ -208,15 +207,17 @@ def install_libraries(con: Connection):
     libraries = (
         "build-essential",
         "cmake",
+        "cron",
         "curl",
         "git",
         "nano",
-        "python3",
         "python3-pip",
+        "python3",
     )
     con.sudo(f"apt-get install {' '.join(libraries)} -y")
 
     install_fish(con)
+    install_virtualenv(con)
     install_docker(con)
 
 
@@ -240,6 +241,10 @@ def install_fish(con: Connection):
     con.run("echo omf install agnoster | fish")
     con.run("echo omf theme agnoster | fish")
     con.run("echo omf install bang-bang | fish")
+
+
+def install_virtualenv(con: Connection):
+    con.run("python3 -m pip install virtualenv")
 
 
 def install_docker(con: Connection):
