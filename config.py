@@ -1,4 +1,4 @@
-from pydantic import BaseSettings
+from pydantic import BaseSettings, DirectoryPath
 
 
 class Settings(BaseSettings):
@@ -18,6 +18,11 @@ class Settings(BaseSettings):
 
     github_token: str
     production: bool = False
+    services_docker_path: DirectoryPath
 
 
 settings = Settings()
+
+
+if __name__ == "__main__":
+    print(repr(settings))

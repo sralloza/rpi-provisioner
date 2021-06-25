@@ -25,6 +25,35 @@ config2 = Config(
 )
 
 
+class BetterConnection(Connection):
+    def __init__(
+        self,
+        host,
+        user=None,
+        port=None,
+        config=None,
+        gateway=None,
+        forward_agent=None,
+        connect_timeout=None,
+        connect_kwargs=None,
+        inline_ssh_env=None,
+    ):
+        super().__init__(
+            host,
+            user=user,
+            port=port,
+            config=config,
+            gateway=gateway,
+            forward_agent=forward_agent,
+            connect_timeout=connect_timeout,
+            connect_kwargs=connect_kwargs,
+            inline_ssh_env=inline_ssh_env,
+        )
+
+    def sudo(self, command, **kwargs):
+        return super().sudo(command, **kwargs)
+
+
 def main():
     con1 = Connection(
         host=env.host,
@@ -43,6 +72,7 @@ def main():
         config=config2,
     )
 
+    # Layer 1: [pi] add deployer user
     try:
         with con1 as con:
             con.sudo("whoami")
@@ -52,11 +82,13 @@ def main():
             raise
         info("First login failed, deployer should be already created")
 
+    # Layer 2: [deployer] install fish shell
     sleep(1)
     with con2 as con:
         con.sudo("whoami")
         setup_server(con)
 
+    # Layer 3: [deployer, fish]
     with con3 as con:
         con.sudo("whoami")
         deploy_services(con)
@@ -256,8 +288,40 @@ def install_docker(con: Connection):
     con.run(f"echo fish_add_path /home/{env.deployer_user}/.local/bin/ | fish")
 
 
+#
+# Layer 3
+#
+
+
+def trust_github_ssh_keys(con: Connection):
+    con.run("ssh-keyscan github.com >> /tmp/githubKey")
+    con.run("cat /tmp/githubKey >> ~/.ssh/known_hosts")
+    con.run("ssh-keygen -t rsa -b 2048 -f ~/.ssh/id_rsa -N " "")
+
+
+def copy_docker_env_files(con: Connection):
+    files = list(settings.services_docker_path.glob("*.env"))
+    for file in files:
+        con.put(file, "/srv/docker/" + file.name)
+
+
 def deploy_services(con: Connection):
-    con.run(f"git clone https://{env.github_token}@github.com/sralloza/services.git /srv")
+    trust_github_ssh_keys(con)
+    copy_docker_env_files(con)
+    con.run(f"set -Ux GITHUB_TOKEN {env.github_token}")
+    con.sudo(
+        f"git clone -b ssh-submodules 'https://{env.github_token}@github.com/sralloza/services.git' /srv"
+    )
+    con.sudo(f"chown -R {env.deployer_user}:{env.deployer_user} /srv")
+    # con.run("cd /srv && git submodule init && git submodule update -f")
+    con.run("crontab /srv/cron/crontab")
+    # con.run(
+    #     "cd /srv/cron/auto-cloudflare && virtualenv .venv && source .venv/bin/activate.fish && python -m pip install -r requirements.txt && deactivate"
+    # )
+
+    yaml = f"prod.{'un' if not env.production else ''}secure.yaml"
+    con.run(f"cd /srv/docker && docker-compose -f {yaml} up -d --remove-orphans")
+
 
 if __name__ == "__main__":
     main()
