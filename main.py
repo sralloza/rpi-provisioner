@@ -296,7 +296,7 @@ def install_docker(con: Connection):
 def trust_github_ssh_keys(con: Connection):
     con.run("ssh-keyscan github.com >> /tmp/githubKey")
     con.run("cat /tmp/githubKey >> ~/.ssh/known_hosts")
-    con.run("ssh-keygen -t rsa -b 2048 -f ~/.ssh/id_rsa -N " "")
+    con.run('ssh-keygen -t rsa -b 2048 -f ~/.ssh/id_rsa -N ""')
 
 
 def copy_docker_env_files(con: Connection):
