@@ -245,6 +245,7 @@ def install_libraries(con: Connection):
         "nano",
         "python3-pip",
         "python3",
+        "wget",
     )
     con.sudo(f"apt-get install {' '.join(libraries)} -y")
 
@@ -258,8 +259,12 @@ def install_fish(con: Connection):
         "echo 'deb http://download.opensuse.org/repositories/shells:/fish:/release:/3/Debian_10/ /' | sudo tee /etc/apt/sources.list.d/shells:fish:release:3.list"
     )
     con.run(
-        "curl -fsSL https://download.opensuse.org/repositories/shells:fish:release:3/Debian_10/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/shells_fish_release_3.gpg > /dev/null"
+        "curl -fsSL https://download.opensuse.org/repositories/shells:fish:release:3/Debian_10/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/shells_fish_release_3.gpg"
     )
+    con.run(
+        "sudo wget -nv https://download.opensuse.org/repositories/shells:fish:release:3/Debian_10/Release.key -O '/etc/apt/trusted.gpg.d/shells_fish_release_3.asc'"
+    )
+
     con.sudo("apt update")
     con.sudo("apt install fish -y")
 
@@ -307,20 +312,23 @@ def copy_docker_env_files(con: Connection):
 
 def deploy_services(con: Connection):
     trust_github_ssh_keys(con)
-    copy_docker_env_files(con)
     con.run(f"set -Ux GITHUB_TOKEN {env.github_token}")
     con.sudo(
         f"git clone -b ssh-submodules 'https://{env.github_token}@github.com/sralloza/services.git' /srv"
     )
     con.sudo(f"chown -R {env.deployer_user}:{env.deployer_user} /srv")
-    # con.run("cd /srv && git submodule init && git submodule update -f")
-    con.run("crontab /srv/cron/crontab")
-    # con.run(
-    #     "cd /srv/cron/auto-cloudflare && virtualenv .venv && source .venv/bin/activate.fish && python -m pip install -r requirements.txt && deactivate"
-    # )
+    con.run(f"sed -i 's/$GITHUB_TOKEN/{env.github_token}/' /srv/.gitmodules")
+    con.run("cd /srv && git submodule init && git submodule update -f")
+    con.run("cd /srv && git checkout .")
 
-    yaml = f"prod.{'un' if not env.production else ''}secure.yaml"
-    con.run(f"cd /srv/docker && docker-compose -f {yaml} up -d --remove-orphans")
+    copy_docker_env_files(con)
+    con.run("crontab /srv/cron/crontab")
+    con.run(
+        "cd /srv/cron/auto-cloudflare && virtualenv .venv && source .venv/bin/activate.fish && python -m pip install -r requirements.txt && deactivate"
+    )
+
+    yaml = f"prod.{'un' if not env.production else ''}secure.yml"
+    con.run(f"cd /srv/docker && pwd && ls -la && docker-compose -f {yaml} up -d --remove-orphans")
 
 
 if __name__ == "__main__":
