@@ -6,6 +6,8 @@
 #
 bcrypt==3.2.0
     # via paramiko
+beepy==1.0.7
+    # via -r requirements.in
 cffi==1.14.5
     # via
     #   bcrypt
@@ -35,6 +37,8 @@ python-dateutil==2.8.1
     # via pendulum
 pytzdata==2020.1
     # via pendulum
+simpleaudio==1.0.4
+    # via beepy
 six==1.16.0
     # via
     #   bcrypt

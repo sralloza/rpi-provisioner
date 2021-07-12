@@ -2,6 +2,7 @@ from os import system
 from time import sleep
 
 import pendulum as pm
+from beepy import beep
 from tabulate import tabulate
 
 t0 = pm.now()
@@ -29,3 +30,5 @@ data = [
 ]
 print("\n\n")
 print(tabulate(data, headers=["Concept", "Time"]))
+beep(5)
+beep(5)
