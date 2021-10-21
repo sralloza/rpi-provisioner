@@ -1,6 +1,8 @@
 git+https://github.com/davidjmemmett/fabric.git@f8cf9ad30efb773f055bf7c174ef98ba225405fc
 beepy~=1.0.7
+jinja2~=3.0.2
 passlib~=1.7.4
 pendulum~=2.1.2
 pydantic~=1.8.2
+python-dotenv~=0.19.1
 tabulate~=0.8.9

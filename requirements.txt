@@ -19,6 +19,10 @@ git+https://github.com/davidjmemmett/fabric.git@f8cf9ad30efb773f055bf7c174ef98ba
     # via -r requirements.in
 invoke==1.5.0
     # via fabric
+jinja2==3.0.2
+    # via -r requirements.in
+markupsafe==2.0.1
+    # via jinja2
 paramiko==2.7.2
     # via fabric
 passlib==1.7.4
@@ -35,6 +39,8 @@ pynacl==1.4.0
     # via paramiko
 python-dateutil==2.8.1
     # via pendulum
+python-dotenv==0.19.1
+    # via -r requirements.in
 pytzdata==2020.1
     # via pendulum
 simpleaudio==1.0.4
