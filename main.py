@@ -88,6 +88,7 @@ def main():
         con.sudo("whoami")
         setup_server(con)
 
+    return  # Do not deploy services
     # Layer 3: [deployer, fish]
     with con3 as con:
         con.sudo("whoami")
