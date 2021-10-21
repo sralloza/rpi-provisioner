@@ -105,6 +105,7 @@ def setup_deployer(con: Connection):
     ensure_local_keys(con)
     update_keys(con)
     setup_sshd_config(con)
+    disable_pi_login(con)
 
 
 def setup_server(con: Connection):
@@ -232,6 +233,11 @@ def setup_sshd_config(con: Connection):
     con.sudo("service ssh reload")
 
 
+def disable_pi_login(con: Connection):
+    con.sudo(f"passwd -d {settings.initial_login_user}")
+    con.sudo(f"usermod -s /usr/sbin/nologin {settings.initial_login_user}")
+
+
 def install_libraries(con: Connection):
     con.sudo("apt-get update")
     con.sudo("apt-get upgrade -y")
@@ -328,7 +334,9 @@ def deploy_services(con: Connection):
     )
 
     yaml = f"prod.{'un' if not env.production else ''}secure.yml"
-    con.run(f"cd /srv/docker && pwd && ls -la && docker-compose -f {yaml} up -d --remove-orphans")
+    con.run(
+        f"cd /srv/docker && pwd && ls -la && docker-compose -f {yaml} up -d --remove-orphans"
+    )
 
 
 if __name__ == "__main__":
