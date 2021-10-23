@@ -10,7 +10,6 @@ from passlib.context import CryptContext
 
 from config import settings
 
-env = settings
 config1 = Config(
     overrides={
         "sudo": {"password": settings.initial_login_password},
@@ -56,19 +55,19 @@ class BetterConnection(Connection):
 
 def main():
     con1 = Connection(
-        host=env.host,
-        user=env.initial_login_user,
-        connect_kwargs={"password": env.initial_login_password},
+        host=settings.host,
+        user=settings.initial_login_user,
+        connect_kwargs={"password": settings.initial_login_password},
         config=config1,
     )
     con2 = Connection(
-        host=env.host,
-        user=env.deployer_user,
+        host=settings.host,
+        user=settings.deployer_user,
         config=config1,
     )
     con3 = Connection(
-        host=env.host,
-        user=env.deployer_user,
+        host=settings.host,
+        user=settings.deployer_user,
         config=config2,
     )
 
@@ -88,11 +87,12 @@ def main():
         con.sudo("whoami")
         setup_server(con)
 
-    return  # Do not deploy services
+    return
+
     # Layer 3: [deployer, fish]
     with con3 as con:
         con.sudo("whoami")
-        deploy_services(con)
+        install_k3s(con)
 
 
 def info(msg):
@@ -117,10 +117,10 @@ def setup_server(con: Connection):
 
 def create_deployer_group(con: Connection):
     info("Creating deployer group")
-    if con.run(f"grep -q {env.deployer_group} /etc/group", warn=True).ok:
+    if con.run(f"grep -q {settings.deployer_group} /etc/group", warn=True).ok:
         info("Deployer group already exists")
     else:
-        con.sudo(f"groupadd {env.deployer_group}")
+        con.sudo(f"groupadd {settings.deployer_group}")
 
     current_sudoers = con.sudo("cat /etc/sudoers").stdout.strip()
     con.sudo("cp /etc/sudoers /etc/sudoers.backup")
@@ -128,7 +128,7 @@ def create_deployer_group(con: Connection):
     info("Updating sudoers file")
 
     # TODO: only allow to run sudo tee without password
-    sudoers = current_sudoers + f"\n\n{env.deployer_group} ALL=(ALL) NOPASSWD: ALL\n"
+    sudoers = current_sudoers + f"\n\n{settings.deployer_group} ALL=(ALL) NOPASSWD: ALL\n"
     sudoers = sudoers.encode("utf8").replace(b"\r\n", b"\n")
 
     Path("sudoers.tmp").write_bytes(sudoers)
@@ -145,20 +145,20 @@ def create_deployer_group(con: Connection):
 
 def create_deployer_user(con: Connection):
     info("Creating deployer user")
-    if con.run(f"id {env.deployer_user}", warn=True).ok:
+    if con.run(f"id {settings.deployer_user}", warn=True).ok:
         return info("Deployer user already exists")
 
-    password = CryptContext(schemes=["sha256_crypt"]).hash(env.deployer_password)
+    password = CryptContext(schemes=["sha256_crypt"]).hash(settings.deployer_password)
     info(password)
 
     con.sudo(
-        f"useradd -m -c '{env.full_name_user}' -s /bin/bash "
-        f"-g {env.deployer_group} -p '{password}' {env.deployer_user}"
+        f"useradd -m -c '{settings.full_name_user}' -s /bin/bash "
+        f"-g {settings.deployer_group} -p '{password}' {settings.deployer_user}"
     )
-    con.sudo("usermod -a -G {} {}".format(env.deployer_group, env.deployer_user))
-    con.sudo("mkdir /home/{}/.ssh".format(env.deployer_user))
-    con.sudo("chown -R {} /home/{}/.ssh".format(env.deployer_user, env.deployer_user))
-    con.sudo("chgrp -R {} /home/{}/.ssh".format(env.deployer_group, env.deployer_user))
+    con.sudo("usermod -a -G {} {}".format(settings.deployer_group, settings.deployer_user))
+    con.sudo("mkdir /home/{}/.ssh".format(settings.deployer_user))
+    con.sudo("chown -R {} /home/{}/.ssh".format(settings.deployer_user, settings.deployer_user))
+    con.sudo("chgrp -R {} /home/{}/.ssh".format(settings.deployer_group, settings.deployer_user))
 
 
 def ensure_local_keys(con: Connection):
@@ -181,7 +181,7 @@ def ensure_local_keys(con: Connection):
 def update_keys(con: Connection):
     info("Updating keys")
     public_key_path = Path.home() / ".ssh/id_rsa.pub"
-    user = env.deployer_user
+    user = settings.deployer_user
 
     if user == "root":
         authorized_keys_path = f"/root/.ssh/authorized_keys"
@@ -218,7 +218,7 @@ def update_keys(con: Connection):
     con.sudo(f"chmod 700 {ssh_folder}")
     con.sudo(f"chmod 600 {authorized_keys_path}")
 
-    ownership = f"{env.deployer_user}:{env.deployer_password}"
+    ownership = f"{settings.deployer_user}:{settings.deployer_password}"
     con.sudo(f"chown {ownership} {ssh_folder}")
     con.sudo(f"chown {ownership} {authorized_keys_path}")
 
@@ -275,7 +275,7 @@ def install_fish(con: Connection):
     con.sudo("apt update")
     con.sudo("apt install fish -y")
 
-    con.sudo(f"chsh -s /usr/bin/fish {env.deployer_user}")
+    con.sudo(f"chsh -s /usr/bin/fish {settings.deployer_user}")
 
     # Oh My Fish
     con.run("curl -L https://get.oh-my.fish > /tmp/omf.sh")
@@ -295,9 +295,9 @@ def install_docker(con: Connection):
     con.run("curl -fsSL https://get.docker.com -o /tmp/get-docker.sh")
     con.sudo("sh /tmp/get-docker.sh")
     con.run("rm /tmp/get-docker.sh")
-    con.sudo(f"usermod -aG docker {env.deployer_user}")
+    con.sudo(f"usermod -aG docker {settings.deployer_user}")
     con.run("python3 -m pip install docker-compose")
-    con.run(f"echo fish_add_path /home/{env.deployer_user}/.local/bin/ | fish")
+    con.run(f"echo fish_add_path /home/{settings.deployer_user}/.local/bin/ | fish")
 
 
 #
@@ -317,27 +317,13 @@ def copy_docker_env_files(con: Connection):
         con.put(file, "/srv/docker/" + file.name)
 
 
-def deploy_services(con: Connection):
-    trust_github_ssh_keys(con)
-    con.run(f"set -Ux GITHUB_TOKEN {env.github_token}")
-    con.sudo(
-        f"git clone -b ssh-submodules 'https://{env.github_token}@github.com/sralloza/services.git' /srv"
-    )
-    con.sudo(f"chown -R {env.deployer_user}:{env.deployer_user} /srv")
-    con.run(f"sed -i 's/$GITHUB_TOKEN/{env.github_token}/' /srv/.gitmodules")
-    con.run("cd /srv && git submodule init && git submodule update -f")
-    con.run("cd /srv && git checkout .")
-
-    copy_docker_env_files(con)
-    con.run("crontab /srv/cron/crontab")
-    con.run(
-        "cd /srv/cron/auto-cloudflare && virtualenv .venv && source .venv/bin/activate.fish && python -m pip install -r requirements.txt && deactivate"
-    )
-
-    yaml = f"prod.{'un' if not env.production else ''}secure.yml"
-    con.run(
-        f"cd /srv/docker && pwd && ls -la && docker-compose -f {yaml} up -d --remove-orphans"
-    )
+def install_k3s(con: Connection):
+    """Install k3s. Note it's not tested."""
+    # Not tested
+    # 1. Add 'cgroup_enable=cpuset cgroup_enable=memory cgroup_memory=1' to /boot/cmdline.txt
+    # 2. curl -sfL https://get.k3s.io | sh -s - --write-kubeconfig-mode 644 --tls-san 2.154.4.76
+    # 3. Reboot? Warning: the previous command returns error
+    # 4. Remember /etc/rancher/k3s/config.yaml
 
 
 if __name__ == "__main__":

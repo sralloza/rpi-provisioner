@@ -2,9 +2,8 @@ from pydantic import BaseSettings, DirectoryPath
 
 
 class Settings(BaseSettings):
-    host: str = "192.168.0.119"
-    # host: str = "localhost"
-    new_host: str = "192.168.0.98"
+    host: str
+    new_host: str
 
     initial_login_user: str = "pi"
     initial_login_group: str = "pi"
@@ -20,6 +19,10 @@ class Settings(BaseSettings):
     github_token: str
     production: bool = False
     services_docker_path: DirectoryPath
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
 
 
 settings = Settings()
