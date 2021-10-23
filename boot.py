@@ -63,13 +63,11 @@ def setup_wifi_connection():
             "country_code": getenv("COUNTRY_CODE"),
         }
         wpa_data = render("wpa_supplicant.conf.j2", env)
-        wpa_data = Path(__file__).with_name("wpa_supplicant.conf").read_bytes()
-        DRIVE.joinpath("wpa_supplicant.conf").write_bytes(wpa_data)
+        DRIVE.joinpath("wpa_supplicant.conf").write_text(wpa_data, encoding="utf8")
 
 
 @call_count
 def add_to_cmdlines_txt(text: str, called: int = 0):
-    print(called)
     append_text = " " + text
     cmd_path = DRIVE.joinpath("cmdline.txt")
 
