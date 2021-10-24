@@ -111,6 +111,7 @@ def setup_deployer(con: Connection):
 
 def setup_server(con: Connection):
     install_libraries(con)
+    set_hostname(con)
 
     info("Done")
 
@@ -237,6 +238,12 @@ def setup_sshd_config(con: Connection):
 def disable_pi_login(con: Connection):
     con.sudo(f"passwd -d {settings.initial_login_user}")
     con.sudo(f"usermod -s /usr/sbin/nologin {settings.initial_login_user}")
+
+
+def set_hostname(con: Connection):
+    con.sudo(f"hostname {settings.hostname}")
+    con.sudo(f"echo {settings.hostname} > /etc/hostname")
+    con.sudo(f"echo '127.0.1.1\t{settings.hostname}' > /etc/hosts")
 
 
 def install_libraries(con: Connection):
