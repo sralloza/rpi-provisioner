@@ -48,7 +48,7 @@ var layer1Cmd = &cobra.Command{
  - Disable pi login
 `,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Println("layer1 called")
+		fmt.Println("Privioning layer 1...")
 		return layer1(cmd)
 	},
 }
@@ -170,7 +170,13 @@ func createDeployerGroup(conn *ssh.Client, settings Settings) error {
 	}
 	initialSudoers = strings.Trim(initialSudoers, "\n\r")
 
-	newSudoers := initialSudoers + "\n\n" + settings.deployerGroup + " ALL=(ALL) NOPASSWD: ALL\n"
+	extraSudoer := fmt.Sprintf("%s ALL=(ALL) NOPASSWD: ALL", settings.deployerGroup)
+	if strings.Index(initialSudoers, extraSudoer) != -1 {
+		fmt.Println("Sudoer already setup")
+		return nil
+	}
+
+	newSudoers := fmt.Sprintf("%s\n\n%s\n", initialSudoers, extraSudoer)
 	newSudoers = strings.ReplaceAll(newSudoers, "\r\n", "\n")
 
 	// _, _, err = runCommand(sudoStdin+fmt.Sprintf("echo '%s' | %stee /etc/sudoers", newSudoers, sudoStdin), conn)
@@ -206,7 +212,7 @@ func runCommand(cmd string, conn *ssh.Client) (string, string, error) {
 	io.Copy(bufErr, sessStderr)
 
 	if debug {
-		fmt.Printf("ssh: %#v -> [%#v | %#v | %v]\n", cmd, bufOut.String(), bufErr.String(), err)
+		fmt.Printf("ssh: %#v -> [%#v | %#v | %v]\n\n", cmd, bufOut.String(), bufErr.String(), err)
 	}
 
 	return bufOut.String(), bufErr.String(), err
