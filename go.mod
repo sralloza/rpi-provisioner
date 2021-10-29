@@ -3,6 +3,7 @@ module github.com/sralloza/node-setup/cmd
 go 1.17
 
 require (
+	github.com/aws/aws-sdk-go v1.41.14
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/spf13/cobra v1.2.1
 	github.com/spf13/viper v1.9.0
@@ -14,6 +15,7 @@ require (
 	github.com/fsnotify/fsnotify v1.5.1 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
+	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/magiconair/properties v1.8.5 // indirect
 	github.com/mitchellh/mapstructure v1.4.2 // indirect
 	github.com/pelletier/go-toml v1.9.4 // indirect

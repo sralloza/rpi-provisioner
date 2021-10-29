@@ -16,6 +16,7 @@ limitations under the License.
 package cmd
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -30,6 +31,10 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/spf13/cobra"
 )
 
@@ -39,6 +44,9 @@ type Settings struct {
 	deployerGroup    string
 	deployerUser     string
 	deployerPassword string
+	s3Bucket         string
+	s3File           string
+	s3Region         string
 }
 
 // layer1Cmd represents the layer1 command
@@ -98,6 +106,30 @@ func layer1(cmd *cobra.Command) error {
 		return errors.New("must pass --host")
 	}
 
+	s3Bucket, err := cmd.Flags().GetString("s3-bucket")
+	if err != nil {
+		return err
+	}
+	if len(s3Bucket) == 0 {
+		return errors.New("must pass --s3-bucket")
+	}
+
+	s3File, err := cmd.Flags().GetString("s3-file")
+	if err != nil {
+		return err
+	}
+	if len(s3File) == 0 {
+		return errors.New("must pass --s3-file")
+	}
+
+	s3Region, err := cmd.Flags().GetString("s3-region")
+	if err != nil {
+		return err
+	}
+	if len(s3Region) == 0 {
+		return errors.New("must pass --s3-region")
+	}
+
 	port, err := cmd.Flags().GetInt("port")
 	if err != nil {
 		return err
@@ -124,6 +156,9 @@ func layer1(cmd *cobra.Command) error {
 		deployerGroup:    deployerUser,
 		deployerUser:     deployerUser,
 		deployerPassword: deployerPassword,
+		s3Bucket:         s3Bucket,
+		s3File:           s3File,
+		s3Region:         s3Region,
 	})
 	if err != nil {
 		return err
@@ -136,6 +171,9 @@ func setupDeployer(conn *ssh.Client, settings Settings) error {
 		return err
 	}
 	if err := createDeployerUser(conn, settings); err != nil {
+		return err
+	}
+	if err := uploadsshKeys(conn, settings); err != nil {
 		return err
 	}
 	return nil
@@ -262,6 +300,108 @@ func createDeployerUser(conn *ssh.Client, settings Settings) error {
 	return nil
 }
 
+func uploadsshKeys(conn *ssh.Client, settings Settings) error {
+	fmt.Println("Updating SSH keys")
+
+	catCmd := fmt.Sprintf("cat /home/%s/.ssh/authorized_keys", settings.deployerUser)
+	fileContent, _, err := runCommand(catCmd, conn)
+	var authorizedKeys []string
+	if err != nil {
+		authorizedKeys = strings.Split(strings.Trim(fileContent, "\n"), "\n")
+	} else {
+		authorizedKeys = []string{}
+	}
+
+	newKeys, err := getSavedKeys(settings.s3Bucket, settings.s3File, settings.s3Region)
+	if err != nil {
+		return err
+	}
+	finalKeys := append(authorizedKeys, newKeys...)
+	finalKeys = removeDuplicateStr(finalKeys)
+
+	newFileContent := strings.Trim(strings.Join(finalKeys, "\n"), "\n")
+	updateKeysCmd := fmt.Sprintf("echo \"%s\" > /home/%s/.ssh/authorized_keys", newFileContent, settings.deployerUser)
+	_, _, err = runCommand(sudoStdinLogin(updateKeysCmd, settings), conn)
+	if err != nil {
+		return err
+	}
+
+	sshFolder := fmt.Sprintf("/home/%s/.ssh", settings.deployerUser)
+	authorizedKeysPath := fmt.Sprintf("%s/authorized_keys", sshFolder)
+
+	fmt.Println("Fixing permissions of user's .ssh files")
+	chmodsshCmd := fmt.Sprintf("chmod 700 %s", sshFolder)
+	_, _, err = runCommand(sudoStdinLogin(chmodsshCmd, settings), conn)
+	if err != nil {
+		return err
+	}
+
+	chmodAkpath := fmt.Sprintf("chmod 600 %s", authorizedKeysPath)
+	_, _, err = runCommand(sudoStdinLogin(chmodAkpath, settings), conn)
+	if err != nil {
+		return err
+	}
+
+	ownership := fmt.Sprintf("%s:%s", settings.deployerUser, settings.deployerGroup)
+	chownsshCmd := fmt.Sprintf("chown %s %s", ownership, sshFolder)
+	_, _, err = runCommand(sudoStdinLogin(chownsshCmd, settings), conn)
+	if err != nil {
+		return err
+	}
+
+	chownAkpCmd := fmt.Sprintf("chown %s %s", ownership, authorizedKeysPath)
+	_, _, err = runCommand(sudoStdinLogin(chownAkpCmd, settings), conn)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func getSavedKeys(bucket string, item string, region string) ([]string, error) {
+	file, err := os.Create("tmpfile")
+	if err != nil {
+		return []string{}, err
+	}
+
+	defer file.Close()
+
+	sess, _ := session.NewSession(&aws.Config{Region: aws.String(region)})
+
+	downloader := s3manager.NewDownloader(sess)
+	numBytes, err := downloader.Download(file,
+		&s3.GetObjectInput{
+			Bucket: aws.String(bucket),
+			Key:    aws.String(item),
+		})
+	if err != nil {
+		return []string{}, err
+	}
+
+	fmt.Println("Downloaded", item, numBytes, "bytes")
+
+	data, err := ioutil.ReadFile("tmpfile")
+	if err != nil {
+		return []string{}, err
+	}
+	file.Close()
+
+	err = os.Remove("tmpfile")
+	if err != nil {
+		return []string{}, err
+	}
+
+	var result map[string]string
+	json.Unmarshal(data, &result)
+
+	var publicKeys []string
+	for _, p := range result {
+		publicKeys = append(publicKeys, p)
+	}
+
+	return publicKeys, nil
+}
+
 func runCommand(cmd string, conn *ssh.Client) (string, string, error) {
 	debug, _ := rootCmd.Flags().GetBool("debug")
 	sess, err := conn.NewSession()
@@ -316,6 +456,9 @@ func init() {
 	layer1Cmd.Flags().String("deployer-password", "", "Deployer password")
 	layer1Cmd.Flags().String("host", "", "Server host")
 	layer1Cmd.Flags().Int("port", 22, "Server SSH port")
+	layer1Cmd.Flags().String("s3-bucket", "", "Amazon S3 bucket where the SSH public keys are stored")
+	layer1Cmd.Flags().String("s3-file", "", "Amazon S3 file where the SSH public keys are stored")
+	layer1Cmd.Flags().String("s3-region", "", "Amazon S3 region where the SSH public keys are stored")
 
 	// Here you will define your flags and configuration settings.
 
