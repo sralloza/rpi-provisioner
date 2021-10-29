@@ -50,10 +50,10 @@ var bootCmd = &cobra.Command{
 		wifi_ssid, _ := cmd.Flags().GetString("wifi-ssid")
 		wifi_pass, _ := cmd.Flags().GetString("wifi-pass")
 
-		if wifi_pass == "" && wifi_ssid != "" {
+		if len(wifi_pass) == 0 && len(wifi_ssid) != 0 {
 			return fmt.Errorf("You passed --wifi-ssid, you need to specify --wifi-pass")
 		}
-		if wifi_pass != "" && wifi_ssid == "" {
+		if len(wifi_pass) != 0 && len(wifi_ssid) == 0 {
 			return fmt.Errorf("You passed --wifi-pass, you need to specify --wifi-ssid")
 		}
 		return nil
@@ -152,7 +152,7 @@ func run(cmd *cobra.Command, bootPath string) {
 	cmdlineArgs, _ := cmd.Flags().GetStringArray("cmdline")
 
 	enableSSH(bootPath)
-	if wifiSSID == "" && wifiPass == "" {
+	if len(wifiSSID) == 0 && len(wifiPass) == 0 {
 		println("Skipping setting up Wifi connection")
 	} else {
 		setup_wifi_connection(bootPath, wifiSSID, wifiPass)
