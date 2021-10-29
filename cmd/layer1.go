@@ -139,6 +139,7 @@ func createDeployerGroup(conn *ssh.Client, settings Settings) error {
 }
 
 func runCommand(cmd string, conn *ssh.Client) (string, string, error) {
+	debug, _ := rootCmd.Flags().GetBool("debug")
 	sess, err := conn.NewSession()
 	if err != nil {
 		panic(err)
@@ -158,6 +159,10 @@ func runCommand(cmd string, conn *ssh.Client) (string, string, error) {
 	io.Copy(bufOut, sessStdOut)
 	bufErr := new(strings.Builder)
 	io.Copy(bufErr, sessStderr)
+
+	if debug {
+		fmt.Printf("ssh: '%s' -> [%#v | %#v | %v]\n", cmd, bufOut.String(), bufErr.String(), err)
+	}
 
 	return bufOut.String(), bufErr.String(), err
 }
