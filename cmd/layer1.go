@@ -30,8 +30,11 @@ import (
 )
 
 type Settings struct {
-	deployerGroup string
-	deployerUser  string
+	loginUser        string
+	loginPassword    string
+	deployerGroup    string
+	deployerUser     string
+	deployerPassword string
 }
 
 // layer1Cmd represents the layer1 command
@@ -51,14 +54,39 @@ var layer1Cmd = &cobra.Command{
 }
 
 func layer1(cmd *cobra.Command) error {
-	deployerUser, err := cmd.Flags().GetString("user")
+	loginUser, err := cmd.Flags().GetString("login-user")
+	if err != nil {
+		return err
+	}
+	if len(loginUser) == 0 {
+		return errors.New("must pass --login-user")
+	}
+
+	loginPassword, err := cmd.Flags().GetString("login-password")
+	if err != nil {
+		return err
+	}
+	if len(loginPassword) == 0 {
+		return errors.New("must pass --login-password")
+	}
+
+	deployerUser, err := cmd.Flags().GetString("deployer-user")
 	if err != nil {
 		return err
 	}
 	if len(deployerUser) == 0 {
-		return errors.New("must pass --user")
+		return errors.New("must pass --deployer-user")
 	}
-	host, err :=cmd.Flags().GetString("host")
+
+	deployerPassword, err := cmd.Flags().GetString("deployer-password")
+	if err != nil {
+		return err
+	}
+	if len(deployerPassword) == 0 {
+		return errors.New("must pass --deployer-password")
+	}
+
+	host, err := cmd.Flags().GetString("host")
 	if err != nil {
 		return err
 	}
@@ -73,11 +101,10 @@ func layer1(cmd *cobra.Command) error {
 
 	address := fmt.Sprintf("%s:%d", host, port)
 
-
 	config := &ssh.ClientConfig{
-		User: deployerUser,
+		User: loginUser,
 		Auth: []ssh.AuthMethod{
-			publicKey("~/.ssh/id_rsa"),
+			ssh.Password(loginPassword),
 		},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
@@ -88,8 +115,11 @@ func layer1(cmd *cobra.Command) error {
 	defer conn.Close()
 
 	err = setupDeployer(conn, Settings{
-		deployerGroup: deployerUser,
-		deployerUser:  deployerUser,
+		loginUser:        loginUser,
+		loginPassword:    loginPassword,
+		deployerGroup:    deployerUser,
+		deployerUser:     deployerUser,
+		deployerPassword: deployerPassword,
 	})
 	if err != nil {
 		return err
@@ -104,15 +134,18 @@ func setupDeployer(conn *ssh.Client, settings Settings) error {
 	return nil
 }
 
+func sudoStdin(cmd string, settings Settings) string {
+	return fmt.Sprintf("echo %s | sudo -S bash -c '%s'", settings.loginPassword, cmd)
+}
+
 func createDeployerGroup(conn *ssh.Client, settings Settings) error {
-	// Create deployer group
 	command := fmt.Sprintf("grep -q %s /etc/group", settings.deployerGroup)
 	_, _, err := runCommand(command, conn)
 
 	if err == nil {
 		fmt.Println("Deployer group already exists")
 	} else {
-		command := fmt.Sprintf("sudo groupadd %s", settings.deployerGroup)
+		command := sudoStdin(fmt.Sprintf("groupadd %s", settings.deployerGroup), settings)
 		stdout, stderr, err := runCommand(command, conn)
 		if err != nil {
 			return fmt.Errorf("error creating deployer group: %s [%s %s]", err, stdout, stderr)
@@ -120,19 +153,31 @@ func createDeployerGroup(conn *ssh.Client, settings Settings) error {
 		fmt.Println("Deployer group created")
 	}
 
+	fmt.Println("Checking sudo access")
+	_, _, err = runCommand(sudoStdin("whoami", settings), conn)
+	if err != nil {
+		return nil
+	}
 	fmt.Println("Updating sudoers file")
-	_, _, err = runCommand("sudo cp /etc/sudoers /etc/sudoers.backup", conn)
+	_, _, err = runCommand(sudoStdin("cp /etc/sudoers sudoers", settings), conn)
 	if err != nil {
 		return err
 	}
-	initialSudoers, _, err := runCommand("sudo cat /etc/sudoers", conn)
+
+	initialSudoers, _, err := runCommand(sudoStdin("cat /etc/sudoers", settings), conn)
 	if err != nil {
 		return err
 	}
 	initialSudoers = strings.Trim(initialSudoers, "\n\r")
 
-	newSudoers := initialSudoers + "\n\n"+settings.deployerGroup + " ALL=(ALL) NOPASSWD: ALL\n"
+	newSudoers := initialSudoers + "\n\n" + settings.deployerGroup + " ALL=(ALL) NOPASSWD: ALL\n"
 	newSudoers = strings.ReplaceAll(newSudoers, "\r\n", "\n")
+
+	// _, _, err = runCommand(sudoStdin+fmt.Sprintf("echo '%s' | %stee /etc/sudoers", newSudoers, sudoStdin), conn)
+	_, _, err = runCommand(sudoStdin(fmt.Sprintf("echo \"%s\" > /etc/sudoers", newSudoers), settings), conn)
+	if err != nil {
+		return err
+	}
 	// sudoers = sudoers.encode("utf8").replace(b"\r\n", b"\n")
 
 	return nil
@@ -161,7 +206,7 @@ func runCommand(cmd string, conn *ssh.Client) (string, string, error) {
 	io.Copy(bufErr, sessStderr)
 
 	if debug {
-		fmt.Printf("ssh: '%s' -> [%#v | %#v | %v]\n", cmd, bufOut.String(), bufErr.String(), err)
+		fmt.Printf("ssh: %#v -> [%#v | %#v | %v]\n", cmd, bufOut.String(), bufErr.String(), err)
 	}
 
 	return bufOut.String(), bufErr.String(), err
@@ -186,7 +231,10 @@ func publicKey(path string) ssh.AuthMethod {
 
 func init() {
 	rootCmd.AddCommand(layer1Cmd)
-	layer1Cmd.Flags().String("user", "", "Deployer user")
+	layer1Cmd.Flags().String("login-user", "", "Login user")
+	layer1Cmd.Flags().String("login-password", "", "Login password")
+	layer1Cmd.Flags().String("deployer-user", "", "Deployer user")
+	layer1Cmd.Flags().String("deployer-password", "", "Deployer password")
 	layer1Cmd.Flags().String("host", "", "Server host")
 	layer1Cmd.Flags().Int("port", 22, "Server SSH port")
 
