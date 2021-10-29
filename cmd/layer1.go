@@ -20,9 +20,13 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math/rand"
+	"os"
 	"strings"
+	"time"
 
 	homedir "github.com/mitchellh/go-homedir"
+	"github.com/tredoe/osutil/user/crypt/sha512_crypt"
 
 	"golang.org/x/crypto/ssh"
 
@@ -131,11 +135,22 @@ func setupDeployer(conn *ssh.Client, settings Settings) error {
 	if err := createDeployerGroup(conn, settings); err != nil {
 		return err
 	}
+	if err := createDeployerUser(conn, settings); err != nil {
+		return err
+	}
 	return nil
 }
 
-func sudoStdin(cmd string, settings Settings) string {
-	return fmt.Sprintf("echo %s | sudo -S bash -c '%s'", settings.loginPassword, cmd)
+func baseSudoStdin(cmd string, password string) string {
+	return fmt.Sprintf("echo %s | sudo -S bash -c '%s'", password, cmd)
+}
+
+func sudoStdinLogin(cmd string, settings Settings) string {
+	return baseSudoStdin(cmd, settings.loginPassword)
+}
+
+func sudoStdinDeployer(cmd string, settings Settings) string {
+	return baseSudoStdin(cmd, settings.deployerPassword)
 }
 
 func createDeployerGroup(conn *ssh.Client, settings Settings) error {
@@ -145,7 +160,7 @@ func createDeployerGroup(conn *ssh.Client, settings Settings) error {
 	if err == nil {
 		fmt.Println("Deployer group already exists")
 	} else {
-		command := sudoStdin(fmt.Sprintf("groupadd %s", settings.deployerGroup), settings)
+		command := sudoStdinLogin(fmt.Sprintf("groupadd %s", settings.deployerGroup), settings)
 		stdout, stderr, err := runCommand(command, conn)
 		if err != nil {
 			return fmt.Errorf("error creating deployer group: %s [%s %s]", err, stdout, stderr)
@@ -154,17 +169,17 @@ func createDeployerGroup(conn *ssh.Client, settings Settings) error {
 	}
 
 	fmt.Println("Checking sudo access")
-	_, _, err = runCommand(sudoStdin("whoami", settings), conn)
+	_, _, err = runCommand(sudoStdinLogin("whoami", settings), conn)
 	if err != nil {
 		return nil
 	}
 	fmt.Println("Updating sudoers file")
-	_, _, err = runCommand(sudoStdin("cp /etc/sudoers sudoers", settings), conn)
+	_, _, err = runCommand(sudoStdinLogin("cp /etc/sudoers sudoers", settings), conn)
 	if err != nil {
 		return err
 	}
 
-	initialSudoers, _, err := runCommand(sudoStdin("cat /etc/sudoers", settings), conn)
+	initialSudoers, _, err := runCommand(sudoStdinLogin("cat /etc/sudoers", settings), conn)
 	if err != nil {
 		return err
 	}
@@ -180,11 +195,69 @@ func createDeployerGroup(conn *ssh.Client, settings Settings) error {
 	newSudoers = strings.ReplaceAll(newSudoers, "\r\n", "\n")
 
 	// _, _, err = runCommand(sudoStdin+fmt.Sprintf("echo '%s' | %stee /etc/sudoers", newSudoers, sudoStdin), conn)
-	_, _, err = runCommand(sudoStdin(fmt.Sprintf("echo \"%s\" > /etc/sudoers", newSudoers), settings), conn)
+	_, _, err = runCommand(sudoStdinLogin(fmt.Sprintf("echo \"%s\" > /etc/sudoers", newSudoers), settings), conn)
 	if err != nil {
 		return err
 	}
 	// sudoers = sudoers.encode("utf8").replace(b"\r\n", b"\n")
+
+	return nil
+}
+
+func encryptPassword(userPassword string) string {
+	// Generate a random string for use in the salt
+	const charset = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	seededRand := rand.New(rand.NewSource(time.Now().UnixNano()))
+	s := make([]byte, 8)
+	for i := range s {
+		s[i] = charset[seededRand.Intn(len(charset))]
+	}
+	salt := []byte(fmt.Sprintf("$6$%s", s))
+	// use salt to hash user-supplied password
+	c := sha512_crypt.New()
+	hash, err := c.Generate([]byte(userPassword), salt)
+	if err != nil {
+		fmt.Printf("error hashing user's supplied password: %s\n", err)
+		os.Exit(1)
+	}
+	return string(hash)
+}
+
+func createDeployerUser(conn *ssh.Client, settings Settings) error {
+	fmt.Println("Creating deployer user")
+	_, _, err := runCommand("id "+settings.deployerUser, conn)
+	if err == nil {
+		fmt.Println("Deployer user already created")
+		return nil
+	}
+	// password = CryptContext(schemes=["sha256_crypt"]).hash(settings.deployer_password)
+	// info(password)
+
+	// FIX: password encryption does not work
+	useraddCmd := fmt.Sprintf("useradd -m -c 'deployer' -s /bin/bash -g '%s' ", settings.deployerGroup)
+	useraddCmd += fmt.Sprintf("-p '%s' %s", encryptPassword(settings.deployerPassword), settings.deployerUser)
+	_, _, err = runCommand(sudoStdinLogin(useraddCmd, settings), conn)
+	if err != nil {
+		return err
+	}
+
+	usermodCmd := fmt.Sprintf("usermod -a -G %s %s", settings.deployerGroup, settings.deployerUser)
+	_, _, err = runCommand(sudoStdinLogin(usermodCmd, settings), conn)
+	if err != nil {
+		return err
+	}
+
+	mkdirsshCmd := fmt.Sprintf("mkdir /home/%s/.ssh", settings.deployerUser)
+	_, _, err = runCommand(sudoStdinLogin(mkdirsshCmd, settings), conn)
+	if err != nil {
+		return err
+	}
+
+	chownCmd := fmt.Sprintf("chown -R %s:%s /home/%s", settings.deployerUser, settings.deployerGroup, settings.deployerUser)
+	_, _, err = runCommand(sudoStdinLogin(chownCmd, settings), conn)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
