@@ -219,7 +219,7 @@ def update_keys(con: Connection):
     con.sudo(f"chmod 700 {ssh_folder}")
     con.sudo(f"chmod 600 {authorized_keys_path}")
 
-    ownership = f"{settings.deployer_user}:{settings.deployer_password}"
+    ownership = f"{settings.deployer_user}:{settings.deployer_group}"
     con.sudo(f"chown {ownership} {ssh_folder}")
     con.sudo(f"chown {ownership} {authorized_keys_path}")
 

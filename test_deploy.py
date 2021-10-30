@@ -12,7 +12,7 @@ sleep(3)
 t2 = pm.now()
 system("docker run -d --rm --name rpi-simulator -p 22:22 rpi-simulator")
 t3 = pm.now()
-system("python main.py")
+# system("python main.py")
 t4 = pm.now()
 
 
@@ -30,5 +30,5 @@ data = [
 ]
 print("\n\n")
 print(tabulate(data, headers=["Concept", "Time"]))
-beep(5)
-beep(5)
+# beep(5)
+# beep(5)
