@@ -146,6 +146,10 @@ func layer1(cmd *cobra.Command) error {
 	}
 	conn, err := ssh.Dial("tcp", address, config)
 	if err != nil {
+		if strings.Index(err.Error(), "no supported methods remain") != -1 {
+			println("SSH Connection error, layer 1 should be provisioned")
+			return nil
+		}
 		return err
 	}
 	defer conn.Close()
@@ -177,6 +181,9 @@ func setupDeployer(conn *ssh.Client, settings Settings) error {
 		return err
 	}
 	if err := setupsshdConfig(conn, settings); err != nil {
+		return err
+	}
+	if err := disableLoginUser(conn, settings); err != nil {
 		return err
 	}
 	return nil
@@ -466,6 +473,21 @@ func setupsshdConfig(conn *ssh.Client, settings Settings) error {
 		return err
 	}
 
+	return nil
+}
+
+func disableLoginUser(conn *ssh.Client, settings Settings) error {
+	passwdCmd := fmt.Sprintf("passwd -d %s", settings.loginUser)
+	_, _, err := runCommand(sudoStdinLogin(passwdCmd, settings), conn)
+	if err != nil {
+		return err
+	}
+
+	usermodCmd := fmt.Sprintf("usermod -s /usr/sbin/nologin %s", settings.loginUser)
+	_, _, err = runCommand(sudoStdinLogin(usermodCmd, settings), conn)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
