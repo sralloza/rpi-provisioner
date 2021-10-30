@@ -176,6 +176,9 @@ func setupDeployer(conn *ssh.Client, settings Settings) error {
 	if err := uploadsshKeys(conn, settings); err != nil {
 		return err
 	}
+	if err := setupsshdConfig(conn, settings); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -429,6 +432,41 @@ func runCommand(cmd string, conn *ssh.Client) (string, string, error) {
 	}
 
 	return bufOut.String(), bufErr.String(), err
+}
+
+func setupsshdConfig(conn *ssh.Client, settings Settings) error {
+	config := "/etc/ssh/sshd_config"
+
+	backupCmd := fmt.Sprintf("cp %s %s.backup", config, config)
+	_, _, err := runCommand(sudoStdinLogin(backupCmd, settings), conn)
+	if err != nil {
+		return err
+	}
+
+	usePamCmd := fmt.Sprintf("sed -i \"s/^UsePAM yes/UsePAM no/\" %s", config)
+	_, _, err = runCommand(sudoStdinLogin(usePamCmd, settings), conn)
+	if err != nil {
+		return err
+	}
+
+	permitRootLoginCmd := fmt.Sprintf("sed -i \"s/^PermitRootLogin yes/PermitRootLogin no/\" %s", config)
+	_, _, err = runCommand(sudoStdinLogin(permitRootLoginCmd, settings), conn)
+	if err != nil {
+		return err
+	}
+
+	passwordAuthCmd := fmt.Sprintf("sed -i \"s/^#PasswordAuthentication yes/PasswordAuthentication no/\" %s", config)
+	_, _, err = runCommand(sudoStdinLogin(passwordAuthCmd, settings), conn)
+	if err != nil {
+		return err
+	}
+
+	_, _, err = runCommand(sudoStdinLogin("service ssh reload", settings), conn)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func expandPath(path string) string {
