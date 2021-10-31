@@ -1,4 +1,4 @@
-module github.com/sralloza/rpi-setup/cmd
+module github.com/sralloza/rpi-provisioner/cmd
 
 go 1.17
 
