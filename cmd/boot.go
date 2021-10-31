@@ -59,8 +59,8 @@ var bootCmd = &cobra.Command{
 		return nil
 	},
 
-	Run: func(cmd *cobra.Command, args []string) {
-		run(cmd, args[0])
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return run(cmd, args[0])
 	},
 }
 
@@ -134,30 +134,31 @@ func addCmdlineArgs(bootPath string, args []string) error {
 
 }
 
-func removeDuplicateStr(strSlice []string) []string {
-	allKeys := make(map[string]bool)
-	list := []string{}
-	for _, item := range strSlice {
-		if _, value := allKeys[item]; !value {
-			allKeys[item] = true
-			list = append(list, item)
-		}
-	}
-	return list
-}
 
-func run(cmd *cobra.Command, bootPath string) {
+
+func run(cmd *cobra.Command, bootPath string) error {
 	wifiSSID, _ := cmd.Flags().GetString("wifi-ssid")
 	wifiPass, _ := cmd.Flags().GetString("wifi-pass")
 	cmdlineArgs, _ := cmd.Flags().GetStringArray("cmdline")
 
-	enableSSH(bootPath)
+	err := enableSSH(bootPath)
+	if err != nil {
+		return err
+	}
 	if len(wifiSSID) == 0 && len(wifiPass) == 0 {
 		println("Skipping setting up Wifi connection")
 	} else {
-		setup_wifi_connection(bootPath, wifiSSID, wifiPass)
+		err = setup_wifi_connection(bootPath, wifiSSID, wifiPass)
+		if err != nil {
+			return err
+		}
 	}
-	addCmdlineArgs(bootPath, cmdlineArgs)
+	err = addCmdlineArgs(bootPath, cmdlineArgs)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func init() {
