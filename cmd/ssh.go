@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -77,19 +78,37 @@ func uploadsshKeys(conn *ssh.Client, args UploadsshKeysArgs) error {
 	fileContent, _, err := runCommand(catCmd, conn)
 	var authorizedKeys []string
 	if err != nil {
-		authorizedKeys = strings.Split(strings.Trim(fileContent, "\n"), "\n")
-	} else {
 		authorizedKeys = []string{}
+	} else {
+		authorizedKeys = strings.Split(strings.Trim(fileContent, "\n"), "\n")
 	}
 
 	newKeys, err := getSavedKeys(args.s3Bucket, args.s3File, args.s3Region)
 	if err != nil {
 		return err
 	}
+	sort.Strings(authorizedKeys)
+
 	finalKeys := append(authorizedKeys, newKeys...)
 	finalKeys = removeDuplicateStr(finalKeys)
+	sort.Strings(finalKeys)
 
 	newFileContent := strings.Trim(strings.Join(finalKeys, "\n"), "\n")
+
+	if len(authorizedKeys) == len(finalKeys) {
+		equal := true
+		for i := 0; i < len(authorizedKeys); i++ {
+			if authorizedKeys[i] != finalKeys[i] {
+				equal = false
+				continue
+			}
+		}
+		if equal {
+			fmt.Println("SSH Keys update not needed, same keys detected")
+			return nil
+		}
+	}
+
 	updateKeysCmd := fmt.Sprintf("echo \"%s\" > /home/%s/.ssh/authorized_keys", newFileContent, args.user)
 	_, _, err = runCommand(dynamicSudo(updateKeysCmd, args.password), conn)
 	if err != nil {
