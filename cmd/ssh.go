@@ -67,6 +67,12 @@ func dynamicSudo(cmd string, password string) string {
 func uploadsshKeys(conn *ssh.Client, args UploadsshKeysArgs) error {
 	fmt.Println("Updating SSH keys")
 
+	mkdirCmd := fmt.Sprintf("mkdir -p /home/%s/.ssh", args.user)
+	_, _, err := runCommand(mkdirCmd, conn)
+	if err != nil {
+		return err
+	}
+
 	catCmd := fmt.Sprintf("cat /home/%s/.ssh/authorized_keys", args.user)
 	fileContent, _, err := runCommand(catCmd, conn)
 	var authorizedKeys []string
