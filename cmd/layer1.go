@@ -16,10 +16,8 @@ limitations under the License.
 package cmd
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"strings"
@@ -29,10 +27,6 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/spf13/cobra"
 )
 
@@ -175,7 +169,14 @@ func setupDeployer(conn *ssh.Client, settings Layer1Settings) error {
 	if err := createDeployerUser(conn, settings); err != nil {
 		return err
 	}
-	if err := uploadsshKeys(conn, settings); err != nil {
+	if err := uploadsshKeys(conn, UploadsshKeysArgs{
+		user:     settings.deployerUser,
+		password: settings.loginPassword,
+		group:    settings.deployerGroup,
+		s3Bucket: settings.s3Bucket,
+		s3File:   settings.s3File,
+		s3Region: settings.s3Region,
+	}); err != nil {
 		return err
 	}
 	if err := setupsshdConfig(conn, settings); err != nil {
@@ -187,13 +188,12 @@ func setupDeployer(conn *ssh.Client, settings Layer1Settings) error {
 	return nil
 }
 
-
 func sudoStdinLogin(cmd string, settings Layer1Settings) string {
-	return baseSudoStdin(cmd, settings.loginPassword)
+	return basicSudoStdin(cmd, settings.loginPassword)
 }
 
 func sudoStdinDeployer(cmd string, settings Layer1Settings) string {
-	return baseSudoStdin(cmd, settings.deployerPassword)
+	return basicSudoStdin(cmd, settings.deployerPassword)
 }
 
 func createDeployerGroup(conn *ssh.Client, settings Layer1Settings) error {
@@ -303,108 +303,6 @@ func createDeployerUser(conn *ssh.Client, settings Layer1Settings) error {
 	}
 
 	return nil
-}
-
-func uploadsshKeys(conn *ssh.Client, settings Layer1Settings) error {
-	fmt.Println("Updating SSH keys")
-
-	catCmd := fmt.Sprintf("cat /home/%s/.ssh/authorized_keys", settings.deployerUser)
-	fileContent, _, err := runCommand(catCmd, conn)
-	var authorizedKeys []string
-	if err != nil {
-		authorizedKeys = strings.Split(strings.Trim(fileContent, "\n"), "\n")
-	} else {
-		authorizedKeys = []string{}
-	}
-
-	newKeys, err := getSavedKeys(settings.s3Bucket, settings.s3File, settings.s3Region)
-	if err != nil {
-		return err
-	}
-	finalKeys := append(authorizedKeys, newKeys...)
-	finalKeys = removeDuplicateStr(finalKeys)
-
-	newFileContent := strings.Trim(strings.Join(finalKeys, "\n"), "\n")
-	updateKeysCmd := fmt.Sprintf("echo \"%s\" > /home/%s/.ssh/authorized_keys", newFileContent, settings.deployerUser)
-	_, _, err = runCommand(sudoStdinLogin(updateKeysCmd, settings), conn)
-	if err != nil {
-		return err
-	}
-
-	sshFolder := fmt.Sprintf("/home/%s/.ssh", settings.deployerUser)
-	authorizedKeysPath := fmt.Sprintf("%s/authorized_keys", sshFolder)
-
-	fmt.Println("Fixing permissions of user's .ssh files")
-	chmodsshCmd := fmt.Sprintf("chmod 700 %s", sshFolder)
-	_, _, err = runCommand(sudoStdinLogin(chmodsshCmd, settings), conn)
-	if err != nil {
-		return err
-	}
-
-	chmodAkpath := fmt.Sprintf("chmod 600 %s", authorizedKeysPath)
-	_, _, err = runCommand(sudoStdinLogin(chmodAkpath, settings), conn)
-	if err != nil {
-		return err
-	}
-
-	ownership := fmt.Sprintf("%s:%s", settings.deployerUser, settings.deployerGroup)
-	chownsshCmd := fmt.Sprintf("chown %s %s", ownership, sshFolder)
-	_, _, err = runCommand(sudoStdinLogin(chownsshCmd, settings), conn)
-	if err != nil {
-		return err
-	}
-
-	chownAkpCmd := fmt.Sprintf("chown %s %s", ownership, authorizedKeysPath)
-	_, _, err = runCommand(sudoStdinLogin(chownAkpCmd, settings), conn)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func getSavedKeys(bucket string, item string, region string) ([]string, error) {
-	file, err := os.Create("tmpfile")
-	if err != nil {
-		return []string{}, err
-	}
-
-	defer file.Close()
-
-	sess, _ := session.NewSession(&aws.Config{Region: aws.String(region)})
-
-	downloader := s3manager.NewDownloader(sess)
-	numBytes, err := downloader.Download(file,
-		&s3.GetObjectInput{
-			Bucket: aws.String(bucket),
-			Key:    aws.String(item),
-		})
-	if err != nil {
-		return []string{}, err
-	}
-
-	fmt.Println("Downloaded", item, numBytes, "bytes")
-
-	data, err := ioutil.ReadFile("tmpfile")
-	if err != nil {
-		return []string{}, err
-	}
-	file.Close()
-
-	err = os.Remove("tmpfile")
-	if err != nil {
-		return []string{}, err
-	}
-
-	var result map[string]string
-	json.Unmarshal(data, &result)
-
-	var publicKeys []string
-	for _, p := range result {
-		publicKeys = append(publicKeys, p)
-	}
-
-	return publicKeys, nil
 }
 
 func setupsshdConfig(conn *ssh.Client, settings Layer1Settings) error {
