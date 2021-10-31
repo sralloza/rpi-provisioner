@@ -19,14 +19,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"math/rand"
 	"os"
 	"strings"
 	"time"
 
-	homedir "github.com/mitchellh/go-homedir"
 	"github.com/tredoe/osutil/user/crypt/sha512_crypt"
 
 	"golang.org/x/crypto/ssh"
@@ -38,7 +36,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type Settings struct {
+type Layer1Settings struct {
 	loginUser        string
 	loginPassword    string
 	deployerGroup    string
@@ -154,7 +152,7 @@ func layer1(cmd *cobra.Command) error {
 	}
 	defer conn.Close()
 
-	err = setupDeployer(conn, Settings{
+	err = setupDeployer(conn, Layer1Settings{
 		loginUser:        loginUser,
 		loginPassword:    loginPassword,
 		deployerGroup:    deployerUser,
@@ -170,7 +168,7 @@ func layer1(cmd *cobra.Command) error {
 	return nil
 }
 
-func setupDeployer(conn *ssh.Client, settings Settings) error {
+func setupDeployer(conn *ssh.Client, settings Layer1Settings) error {
 	if err := createDeployerGroup(conn, settings); err != nil {
 		return err
 	}
@@ -189,19 +187,16 @@ func setupDeployer(conn *ssh.Client, settings Settings) error {
 	return nil
 }
 
-func baseSudoStdin(cmd string, password string) string {
-	return fmt.Sprintf("echo %s | sudo -S bash -c '%s'", password, cmd)
-}
 
-func sudoStdinLogin(cmd string, settings Settings) string {
+func sudoStdinLogin(cmd string, settings Layer1Settings) string {
 	return baseSudoStdin(cmd, settings.loginPassword)
 }
 
-func sudoStdinDeployer(cmd string, settings Settings) string {
+func sudoStdinDeployer(cmd string, settings Layer1Settings) string {
 	return baseSudoStdin(cmd, settings.deployerPassword)
 }
 
-func createDeployerGroup(conn *ssh.Client, settings Settings) error {
+func createDeployerGroup(conn *ssh.Client, settings Layer1Settings) error {
 	command := fmt.Sprintf("grep -q %s /etc/group", settings.deployerGroup)
 	_, _, err := runCommand(command, conn)
 
@@ -271,7 +266,7 @@ func encryptPassword(userPassword string) string {
 	return string(hash)
 }
 
-func createDeployerUser(conn *ssh.Client, settings Settings) error {
+func createDeployerUser(conn *ssh.Client, settings Layer1Settings) error {
 	fmt.Println("Creating deployer user")
 	_, _, err := runCommand("id "+settings.deployerUser, conn)
 	if err == nil {
@@ -310,7 +305,7 @@ func createDeployerUser(conn *ssh.Client, settings Settings) error {
 	return nil
 }
 
-func uploadsshKeys(conn *ssh.Client, settings Settings) error {
+func uploadsshKeys(conn *ssh.Client, settings Layer1Settings) error {
 	fmt.Println("Updating SSH keys")
 
 	catCmd := fmt.Sprintf("cat /home/%s/.ssh/authorized_keys", settings.deployerUser)
@@ -412,36 +407,7 @@ func getSavedKeys(bucket string, item string, region string) ([]string, error) {
 	return publicKeys, nil
 }
 
-func runCommand(cmd string, conn *ssh.Client) (string, string, error) {
-	debug, _ := rootCmd.Flags().GetBool("debug")
-	sess, err := conn.NewSession()
-	if err != nil {
-		panic(err)
-	}
-	defer sess.Close()
-	sessStdOut, err := sess.StdoutPipe()
-	if err != nil {
-		panic(err)
-	}
-	sessStderr, err := sess.StderrPipe()
-	if err != nil {
-		panic(err)
-	}
-	err = sess.Run(cmd)
-
-	bufOut := new(strings.Builder)
-	io.Copy(bufOut, sessStdOut)
-	bufErr := new(strings.Builder)
-	io.Copy(bufErr, sessStderr)
-
-	if debug {
-		fmt.Printf("ssh: %#v -> [%#v | %#v | %v]\n\n", cmd, bufOut.String(), bufErr.String(), err)
-	}
-
-	return bufOut.String(), bufErr.String(), err
-}
-
-func setupsshdConfig(conn *ssh.Client, settings Settings) error {
+func setupsshdConfig(conn *ssh.Client, settings Layer1Settings) error {
 	config := "/etc/ssh/sshd_config"
 
 	backupCmd := fmt.Sprintf("cp %s %s.backup", config, config)
@@ -476,7 +442,7 @@ func setupsshdConfig(conn *ssh.Client, settings Settings) error {
 	return nil
 }
 
-func disableLoginUser(conn *ssh.Client, settings Settings) error {
+func disableLoginUser(conn *ssh.Client, settings Layer1Settings) error {
 	passwdCmd := fmt.Sprintf("passwd -d %s", settings.loginUser)
 	_, _, err := runCommand(sudoStdinLogin(passwdCmd, settings), conn)
 	if err != nil {
@@ -489,23 +455,6 @@ func disableLoginUser(conn *ssh.Client, settings Settings) error {
 		return err
 	}
 	return nil
-}
-
-func expandPath(path string) string {
-	res, _ := homedir.Expand(path)
-	return res
-}
-
-func publicKey(path string) ssh.AuthMethod {
-	key, err := ioutil.ReadFile(expandPath(path))
-	if err != nil {
-		panic(err)
-	}
-	signer, err := ssh.ParsePrivateKey(key)
-	if err != nil {
-		panic(err)
-	}
-	return ssh.PublicKeys(signer)
 }
 
 func init() {
