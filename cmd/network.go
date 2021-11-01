@@ -32,7 +32,13 @@ var networkingCmd = &cobra.Command{
 	Long:  `Set up static ip for eth0 and wlan0`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Println("Provisioning network")
-		return networkingEntrypoint(cmd)
+		if err := networkingEntrypoint(cmd); err != nil {
+			return err
+		}
+		ip, _ := cmd.Flags().GetIP("ip")
+		fmt.Println("Network provisioned successfully")
+		fmt.Println("Static ip: " + ip.String())
+		return nil
 	},
 }
 
@@ -110,16 +116,19 @@ type interfaceArgs struct {
 
 func setupNetworking(conn *ssh.Client, args interfaceArgs) error {
 	// the lowest metric has priority -> eth0
+	fmt.Println("Setting static ip for interface eth0")
 	err := setupStaticIPIface(conn, args, "eth0", 100)
 	if err != nil {
 		return err
 	}
 
+	fmt.Println("Setting static ip for interface wlan0")
 	err = setupStaticIPIface(conn, args, "wlan0", 200)
 	if err != nil {
 		return err
 	}
 
+	fmt.Println("Restarting DHCP")
 	err = rebootdhcpd(conn, args.password)
 	if err != nil {
 		return err
