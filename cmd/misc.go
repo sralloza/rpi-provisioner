@@ -1,6 +1,20 @@
 package cmd
 
-import homedir "github.com/mitchellh/go-homedir"
+import (
+	"fmt"
+	"strings"
+
+	homedir "github.com/mitchellh/go-homedir"
+)
+
+func splitAwsPath(awsPath string) (string, string, string, error) {
+	chunks := strings.Split(awsPath, "/")
+	if len(chunks) != 3 {
+		AwsErrorMsg := "awsPath must match pattern region/bucket/file (%#v)"
+		return "", "", "", fmt.Errorf(AwsErrorMsg, awsPath)
+	}
+	return chunks[0], chunks[1], chunks[2], nil
+}
 
 func expandPath(path string) string {
 	res, _ := homedir.Expand(path)

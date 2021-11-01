@@ -84,17 +84,12 @@ func layer1(cmd *cobra.Command) error {
 		return err
 	}
 
-	s3Bucket, err := cmd.Flags().GetString("s3-bucket")
+	s3Path, err := cmd.Flags().GetString("s3-path")
 	if err != nil {
 		return err
 	}
-
-	s3File, err := cmd.Flags().GetString("s3-file")
-	if err != nil {
-		return err
-	}
-
-	s3Region, err := cmd.Flags().GetString("s3-region")
+	
+	s3Region, s3Bucket, s3File, err := splitAwsPath(s3Path)
 	if err != nil {
 		return err
 	}
@@ -352,9 +347,7 @@ func init() {
 	layer1Cmd.Flags().String("root-password", "", "Root password")
 	layer1Cmd.Flags().String("host", "", "Server host")
 	layer1Cmd.Flags().Int("port", 22, "Server SSH port")
-	layer1Cmd.Flags().String("s3-bucket", "", "Amazon S3 bucket where the SSH public keys are stored")
-	layer1Cmd.Flags().String("s3-file", "", "Amazon S3 file where the SSH public keys are stored")
-	layer1Cmd.Flags().String("s3-region", "", "Amazon S3 region where the SSH public keys are stored")
+	layer1Cmd.Flags().String("s3-path", "", "Amazon S3 path. Must match the pattern region/bucket/file")
 	layer1Cmd.Flags().IP("static-ip", nil, "Set up the static ip for eth0 and wlan0")
 
 	layer1Cmd.MarkFlagRequired("login-user")
@@ -362,9 +355,7 @@ func init() {
 	layer1Cmd.MarkFlagRequired("deployer-user")
 	layer1Cmd.MarkFlagRequired("deployer-password")
 	layer1Cmd.MarkFlagRequired("host")
-	layer1Cmd.MarkFlagRequired("s3-bucket")
-	layer1Cmd.MarkFlagRequired("s3-file")
-	layer1Cmd.MarkFlagRequired("s3-region")
+	layer1Cmd.MarkFlagRequired("s3-path")
 
 	// Here you will define your flags and configuration settings.
 

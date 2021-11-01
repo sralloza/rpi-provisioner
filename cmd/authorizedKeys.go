@@ -63,17 +63,12 @@ func updateAuthorizedKeys(cmd *cobra.Command) error {
 		return errors.New("must pass --ssh-key or --password")
 	}
 
-	s3Bucket, err := cmd.Flags().GetString("s3-bucket")
+	s3Path, err := cmd.Flags().GetString("s3-path")
 	if err != nil {
 		return err
 	}
-
-	s3File, err := cmd.Flags().GetString("s3-file")
-	if err != nil {
-		return err
-	}
-
-	s3Region, err := cmd.Flags().GetString("s3-region")
+	
+	s3Region, s3Bucket, s3File, err := splitAwsPath(s3Path)
 	if err != nil {
 		return err
 	}
@@ -125,15 +120,10 @@ func init() {
 	authorizedKeysCmd.Flags().String("password", "", "Login password")
 	authorizedKeysCmd.Flags().String("host", "", "Server host")
 	authorizedKeysCmd.Flags().Int("port", 22, "Server SSH port")
-	authorizedKeysCmd.Flags().String("s3-bucket", "", "Amazon S3 bucket where the SSH public keys are stored")
-	authorizedKeysCmd.Flags().String("s3-file", "", "Amazon S3 file where the SSH public keys are stored")
-	authorizedKeysCmd.Flags().String("s3-region", "", "Amazon S3 region where the SSH public keys are stored")
+	authorizedKeysCmd.Flags().String("s3-path", "", "Amazon S3 path. Must match the pattern region/bucket/file")
 
-	authorizedKeysCmd.MarkFlagRequired("user")
-	authorizedKeysCmd.MarkFlagRequired("host")
-	authorizedKeysCmd.MarkFlagRequired("s3-bucket")
-	authorizedKeysCmd.MarkFlagRequired("s3-file")
-	authorizedKeysCmd.MarkFlagRequired("s3-region")
+	authorizedKeysCmd.MarkFlagRequired("s3-path")
+
 	// Here you will define your flags and configuration settings.
 
 	// Cobra supports Persistent Flags which will work for this command
