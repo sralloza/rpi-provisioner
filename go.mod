@@ -1,4 +1,4 @@
-module github.com/sralloza/rpi-provisioner/cmd
+module github.com/sralloza/rpi-provision/cmd
 
 go 1.17
 
@@ -7,7 +7,6 @@ require (
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/spf13/cobra v1.2.1
 	github.com/spf13/viper v1.9.0
-	github.com/tredoe/osutil v1.0.6
 	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519
 )
 

@@ -15,7 +15,7 @@ limitations under the License.
 */
 package main
 
-import "github.com/sralloza/rpi-provisioner/cmd/cmd"
+import "github.com/sralloza/rpi-provision/cmd/cmd"
 
 func main() {
 	cmd.Execute()
