@@ -24,7 +24,7 @@ import (
 // layer3Cmd represents the layer3 command
 var layer3Cmd = &cobra.Command{
 	Use:   "layer3",
-	Short: "Provisions layer 3",
+	Short: "Provision layer 3",
 	Long: `Layer 3 uses the deployer user and the fish shell. It consists of:
  - Install k3s?
 `,

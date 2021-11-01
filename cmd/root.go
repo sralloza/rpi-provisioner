@@ -28,7 +28,7 @@ var cfgFile string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "rpi-provisioner",
+	Use:   "rpi-provision",
 	Short: "Setup a new raspberry in minutes",
 	Long: `Features:
  - Enable ssh and wifi before first boot
@@ -54,7 +54,7 @@ func init() {
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
 
-	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.rpi-provisioner.yaml)")
+	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.rpi-provision.yaml)")
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
@@ -71,10 +71,10 @@ func initConfig() {
 		home, err := os.UserHomeDir()
 		cobra.CheckErr(err)
 
-		// Search config in home directory with name ".rpi-provisioner" (without extension).
+		// Search config in home directory with name ".rpi-provision" (without extension).
 		viper.AddConfigPath(home)
 		viper.SetConfigType("yaml")
-		viper.SetConfigName(".rpi-provisioner")
+		viper.SetConfigName(".rpi-provision")
 	}
 
 	viper.AutomaticEnv() // read in environment variables that match
