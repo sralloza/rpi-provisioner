@@ -30,6 +30,7 @@ type Layer1Settings struct {
 	deployerGroup    string
 	deployerUser     string
 	deployerPassword string
+	hostname         string
 	s3Bucket         string
 	s3File           string
 	s3Region         string
@@ -49,7 +50,19 @@ var layer1Cmd = &cobra.Command{
 `,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Println("Provisioning layer 1...")
-		return layer1(cmd)
+		if err := layer1(cmd); err != nil {
+			return err
+		}
+
+		fmt.Println("\nLayer 1 provisioned successfully")
+		fmt.Println(
+			"Note: you must restart the server to apply the hostname change " +
+				"and suppress the security risk warning")
+		fmt.Println("\nContinue with layer 2 or ssh into server:")
+		deployerUser, _ := cmd.Flags().GetString("deployer-user")
+		host, _ := cmd.Flags().GetString("host")
+		fmt.Printf("  ssh %s@%s\n", deployerUser, host)
+		return nil
 	},
 }
 
@@ -83,6 +96,10 @@ func layer1(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
+	hostName, err := cmd.Flags().GetString("hostname")
+	if err != nil {
+		return err
+	}
 
 	s3Path, err := cmd.Flags().GetString("s3-path")
 	if err != nil {
@@ -112,7 +129,7 @@ func layer1(cmd *cobra.Command) error {
 	}
 	conn, err := ssh.Dial("tcp", address, config)
 	if err != nil {
-		if strings.Index(err.Error(), "no supported methods remain") != -1 {
+		if strings.Contains(err.Error(), "no supported methods remain") {
 			println("SSH Connection error, layer 1 should be provisioned")
 			return nil
 		}
@@ -126,6 +143,7 @@ func layer1(cmd *cobra.Command) error {
 		deployerGroup:    deployerUser,
 		deployerUser:     deployerUser,
 		deployerPassword: deployerPassword,
+		hostname:         hostName,
 		s3Bucket:         s3Bucket,
 		s3File:           s3File,
 		s3Region:         s3Region,
@@ -169,6 +187,9 @@ func setupDeployer(conn *ssh.Client, settings Layer1Settings) error {
 		return err
 	}
 	if err := setupsshdConfig(conn, settings); err != nil {
+		return err
+	}
+	if err := setHostname(conn, settings); err != nil {
 		return err
 	}
 	if err := disableLoginUser(conn, settings); err != nil {
@@ -320,6 +341,23 @@ func setupsshdConfig(conn *ssh.Client, settings Layer1Settings) error {
 	return nil
 }
 
+func setHostname(conn *ssh.Client, settings Layer1Settings) error {
+	println("Setting hostname")
+	hostnameCmd := fmt.Sprintf("echo \"%s\" > /etc/hostname", settings.hostname)
+	_, _, err := runCommand(sudoStdinLogin(hostnameCmd, settings), conn)
+	if err != nil {
+		return err
+	}
+
+	hostCmd := fmt.Sprintf("echo \"127.0.0.1\t\t%s\" >> /etc/hosts", settings.hostname)
+	_, _, err = runCommand(sudoStdinLogin(hostCmd, settings), conn)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func disableLoginUser(conn *ssh.Client, settings Layer1Settings) error {
 	passwdCmd := fmt.Sprintf("passwd -d %s", settings.loginUser)
 	_, _, err := runCommand(sudoStdinLogin(passwdCmd, settings), conn)
@@ -343,6 +381,7 @@ func init() {
 	layer1Cmd.Flags().String("deployer-password", "", "Deployer password")
 	layer1Cmd.Flags().String("root-password", "", "Root password")
 	layer1Cmd.Flags().String("host", "", "Server host")
+	layer1Cmd.Flags().String("hostname", "", "Server hostname")
 	layer1Cmd.Flags().Int("port", 22, "Server SSH port")
 	layer1Cmd.Flags().String("s3-path", "", "Amazon S3 path. Must match the pattern region/bucket/file")
 	layer1Cmd.Flags().IP("static-ip", nil, "Set up the static ip for eth0 and wlan0")
@@ -352,6 +391,7 @@ func init() {
 	layer1Cmd.MarkFlagRequired("deployer-user")
 	layer1Cmd.MarkFlagRequired("deployer-password")
 	layer1Cmd.MarkFlagRequired("host")
+	layer1Cmd.MarkFlagRequired("host-name")
 	layer1Cmd.MarkFlagRequired("s3-path")
 
 	// Here you will define your flags and configuration settings.
