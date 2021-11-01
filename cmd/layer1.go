@@ -33,6 +33,7 @@ type Layer1Settings struct {
 	s3Bucket         string
 	s3File           string
 	s3Region         string
+	rootPassword     string
 }
 
 // layer1Cmd represents the layer1 command
@@ -68,6 +69,11 @@ func layer1(cmd *cobra.Command) error {
 	}
 
 	deployerPassword, err := cmd.Flags().GetString("deployer-password")
+	if err != nil {
+		return err
+	}
+
+	rootPassword, err := cmd.Flags().GetString("root-password")
 	if err != nil {
 		return err
 	}
@@ -125,6 +131,7 @@ func layer1(cmd *cobra.Command) error {
 		s3Bucket:         s3Bucket,
 		s3File:           s3File,
 		s3Region:         s3Region,
+		rootPassword:     rootPassword,
 	})
 	if err != nil {
 		return err
@@ -138,6 +145,11 @@ func setupDeployer(conn *ssh.Client, settings Layer1Settings) error {
 	}
 	if err := createDeployerUser(conn, settings); err != nil {
 		return err
+	}
+	if len(settings.rootPassword) > 0 {
+		if err := setRootPassword(conn, settings); err != nil {
+			return nil
+		}
 	}
 	if err := uploadsshKeys(conn, UploadsshKeysArgs{
 		user:     settings.deployerUser,
@@ -259,6 +271,16 @@ func createDeployerUser(conn *ssh.Client, settings Layer1Settings) error {
 	return nil
 }
 
+func setRootPassword(conn *ssh.Client, settings Layer1Settings) error {
+	fmt.Println("Setting root password")
+	chpasswdCmd := fmt.Sprintf("echo root:%s | chpasswd", settings.rootPassword)
+	_, _, err := runCommand(sudoStdinLogin(chpasswdCmd, settings), conn)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func setupsshdConfig(conn *ssh.Client, settings Layer1Settings) error {
 	config := "/etc/ssh/sshd_config"
 
@@ -315,6 +337,7 @@ func init() {
 	layer1Cmd.Flags().String("login-password", "", "Login password")
 	layer1Cmd.Flags().String("deployer-user", "", "Deployer user")
 	layer1Cmd.Flags().String("deployer-password", "", "Deployer password")
+	layer1Cmd.Flags().String("root-password", "", "Root password")
 	layer1Cmd.Flags().String("host", "", "Server host")
 	layer1Cmd.Flags().Int("port", 22, "Server SSH port")
 	layer1Cmd.Flags().String("s3-bucket", "", "Amazon S3 bucket where the SSH public keys are stored")
