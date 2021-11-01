@@ -67,24 +67,15 @@ func updateAuthorizedKeys(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
-	if len(s3Bucket) == 0 {
-		return errors.New("must pass --s3-bucket")
-	}
 
 	s3File, err := cmd.Flags().GetString("s3-file")
 	if err != nil {
 		return err
 	}
-	if len(s3File) == 0 {
-		return errors.New("must pass --s3-file")
-	}
 
 	s3Region, err := cmd.Flags().GetString("s3-region")
 	if err != nil {
 		return err
-	}
-	if len(s3Region) == 0 {
-		return errors.New("must pass --s3-region")
 	}
 
 	port, err := cmd.Flags().GetInt("port")
@@ -137,6 +128,12 @@ func init() {
 	authorizedKeysCmd.Flags().String("s3-bucket", "", "Amazon S3 bucket where the SSH public keys are stored")
 	authorizedKeysCmd.Flags().String("s3-file", "", "Amazon S3 file where the SSH public keys are stored")
 	authorizedKeysCmd.Flags().String("s3-region", "", "Amazon S3 region where the SSH public keys are stored")
+
+	authorizedKeysCmd.MarkFlagRequired("user")
+	authorizedKeysCmd.MarkFlagRequired("host")
+	authorizedKeysCmd.MarkFlagRequired("s3-bucket")
+	authorizedKeysCmd.MarkFlagRequired("s3-file")
+	authorizedKeysCmd.MarkFlagRequired("s3-region")
 	// Here you will define your flags and configuration settings.
 
 	// Cobra supports Persistent Flags which will work for this command

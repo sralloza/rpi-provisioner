@@ -16,7 +16,6 @@ limitations under the License.
 package cmd
 
 import (
-	"errors"
 	"fmt"
 	"math/rand"
 	"os"
@@ -62,64 +61,40 @@ func layer1(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
-	if len(loginUser) == 0 {
-		return errors.New("must pass --login-user")
-	}
 
 	loginPassword, err := cmd.Flags().GetString("login-password")
 	if err != nil {
 		return err
-	}
-	if len(loginPassword) == 0 {
-		return errors.New("must pass --login-password")
 	}
 
 	deployerUser, err := cmd.Flags().GetString("deployer-user")
 	if err != nil {
 		return err
 	}
-	if len(deployerUser) == 0 {
-		return errors.New("must pass --deployer-user")
-	}
 
 	deployerPassword, err := cmd.Flags().GetString("deployer-password")
 	if err != nil {
 		return err
-	}
-	if len(deployerPassword) == 0 {
-		return errors.New("must pass --deployer-password")
 	}
 
 	host, err := cmd.Flags().GetString("host")
 	if err != nil {
 		return err
 	}
-	if len(host) == 0 {
-		return errors.New("must pass --host")
-	}
 
 	s3Bucket, err := cmd.Flags().GetString("s3-bucket")
 	if err != nil {
 		return err
-	}
-	if len(s3Bucket) == 0 {
-		return errors.New("must pass --s3-bucket")
 	}
 
 	s3File, err := cmd.Flags().GetString("s3-file")
 	if err != nil {
 		return err
 	}
-	if len(s3File) == 0 {
-		return errors.New("must pass --s3-file")
-	}
 
 	s3Region, err := cmd.Flags().GetString("s3-region")
 	if err != nil {
 		return err
-	}
-	if len(s3Region) == 0 {
-		return errors.New("must pass --s3-region")
 	}
 
 	port, err := cmd.Flags().GetInt("port")
@@ -366,6 +341,15 @@ func init() {
 	layer1Cmd.Flags().String("s3-bucket", "", "Amazon S3 bucket where the SSH public keys are stored")
 	layer1Cmd.Flags().String("s3-file", "", "Amazon S3 file where the SSH public keys are stored")
 	layer1Cmd.Flags().String("s3-region", "", "Amazon S3 region where the SSH public keys are stored")
+
+	layer1Cmd.MarkFlagRequired("login-user")
+	layer1Cmd.MarkFlagRequired("login-password")
+	layer1Cmd.MarkFlagRequired("deployer-user")
+	layer1Cmd.MarkFlagRequired("deployer-password")
+	layer1Cmd.MarkFlagRequired("host")
+	layer1Cmd.MarkFlagRequired("s3-bucket")
+	layer1Cmd.MarkFlagRequired("s3-file")
+	layer1Cmd.MarkFlagRequired("s3-region")
 
 	// Here you will define your flags and configuration settings.
 
