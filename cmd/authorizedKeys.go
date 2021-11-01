@@ -83,7 +83,7 @@ func updateAuthorizedKeys(cmd *cobra.Command) error {
 	var auth []ssh.AuthMethod
 
 	if usesshKey {
-		auth = append(auth, publicKey(expandPath("~/.ssh/id_rsa")))
+		auth = append(auth, publicKey("~/.ssh/id_rsa"))
 	} else {
 		auth = append(auth, ssh.Password(password))
 	}
