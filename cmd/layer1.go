@@ -17,12 +17,7 @@ package cmd
 
 import (
 	"fmt"
-	"math/rand"
-	"os"
 	"strings"
-	"time"
-
-	"github.com/tredoe/osutil/user/crypt/sha512_crypt"
 
 	"golang.org/x/crypto/ssh"
 
@@ -51,7 +46,7 @@ var layer1Cmd = &cobra.Command{
  - Disable pi login
 `,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Println("Privioning layer 1...")
+		fmt.Println("Provisioning layer 1...")
 		return layer1(cmd)
 	},
 }
@@ -222,25 +217,6 @@ func createDeployerGroup(conn *ssh.Client, settings Layer1Settings) error {
 	return nil
 }
 
-func encryptPassword(userPassword string) string {
-	// Generate a random string for use in the salt
-	const charset = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	seededRand := rand.New(rand.NewSource(time.Now().UnixNano()))
-	s := make([]byte, 8)
-	for i := range s {
-		s[i] = charset[seededRand.Intn(len(charset))]
-	}
-	salt := []byte(fmt.Sprintf("$6$%s", s))
-	// use salt to hash user-supplied password
-	c := sha512_crypt.New()
-	hash, err := c.Generate([]byte(userPassword), salt)
-	if err != nil {
-		fmt.Printf("error hashing user's supplied password: %s\n", err)
-		os.Exit(1)
-	}
-	return string(hash)
-}
-
 func createDeployerUser(conn *ssh.Client, settings Layer1Settings) error {
 	fmt.Println("Creating deployer user")
 	_, _, err := runCommand("id "+settings.deployerUser, conn)
@@ -248,13 +224,16 @@ func createDeployerUser(conn *ssh.Client, settings Layer1Settings) error {
 		fmt.Println("Deployer user already created")
 		return nil
 	}
-	// password = CryptContext(schemes=["sha256_crypt"]).hash(settings.deployer_password)
-	// info(password)
 
-	// FIX: password encryption does not work
 	useraddCmd := fmt.Sprintf("useradd -m -c 'deployer' -s /bin/bash -g '%s' ", settings.deployerGroup)
-	useraddCmd += fmt.Sprintf("-p '%s' %s", encryptPassword(settings.deployerPassword), settings.deployerUser)
+	useraddCmd += settings.deployerUser
 	_, _, err = runCommand(sudoStdinLogin(useraddCmd, settings), conn)
+	if err != nil {
+		return err
+	}
+
+	chpasswdCmd := fmt.Sprintf("echo %s:%s | chpasswd", settings.deployerUser, settings.deployerPassword)
+	_, _, err = runCommand(sudoStdinLogin(chpasswdCmd, settings), conn)
 	if err != nil {
 		return err
 	}
