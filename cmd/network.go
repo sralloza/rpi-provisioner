@@ -25,8 +25,6 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-const defaultIP = "0.0.0.0"
-
 // networkingCmd represents the networking command
 var networkingCmd = &cobra.Command{
 	Use:   "network",
@@ -73,9 +71,6 @@ func networkingEntrypoint(cmd *cobra.Command) error {
 	ip, err := cmd.Flags().GetIP("ip")
 	if err != nil {
 		return err
-	}
-	if ip.String() == defaultIP {
-		return errors.New("Must set --ip")
 	}
 
 	address := fmt.Sprintf("%s:%d", host, port)

@@ -104,10 +104,7 @@ func layer1(cmd *cobra.Command) error {
 		return err
 	}
 
-	staticIP, err := cmd.Flags().GetIP("static-ip")
-	if err != nil {
-		return err
-	}
+	staticIP, _ := cmd.Flags().GetIP("static-ip")
 
 	address := fmt.Sprintf("%s:%d", host, port)
 
