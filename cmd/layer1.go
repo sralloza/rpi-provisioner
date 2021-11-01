@@ -223,11 +223,8 @@ func createDeployerGroup(conn *ssh.Client, settings Layer1Settings) error {
 		return nil
 	}
 
-	newSudoers := fmt.Sprintf("%s\n\n%s\n", initialSudoers, extraSudoer)
-	newSudoers = strings.ReplaceAll(newSudoers, "\r\n", "\n")
-
-	// _, _, err = runCommand(sudoStdin+fmt.Sprintf("echo '%s' | %stee /etc/sudoers", newSudoers, sudoStdin), conn)
-	_, _, err = runCommand(sudoStdinLogin(fmt.Sprintf("echo \"%s\" > /etc/sudoers", newSudoers), settings), conn)
+	sudoersCmd := fmt.Sprintf("echo \"\n%s\n\" >> /etc/sudoers", extraSudoer)
+	_, _, err = runCommand(sudoStdinLogin(sudoersCmd, settings), conn)
 	if err != nil {
 		return err
 	}
