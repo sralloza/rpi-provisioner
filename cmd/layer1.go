@@ -88,7 +88,7 @@ func layer1(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
-	
+
 	s3Region, s3Bucket, s3File, err := splitAwsPath(s3Path)
 	if err != nil {
 		return err

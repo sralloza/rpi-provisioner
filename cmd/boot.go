@@ -134,8 +134,6 @@ func addCmdlineArgs(bootPath string, args []string) error {
 
 }
 
-
-
 func run(cmd *cobra.Command, bootPath string) error {
 	wifiSSID, _ := cmd.Flags().GetString("wifi-ssid")
 	wifiPass, _ := cmd.Flags().GetString("wifi-pass")
