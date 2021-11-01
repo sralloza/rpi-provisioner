@@ -45,6 +45,7 @@ var layer1Cmd = &cobra.Command{
  - Set hostname
  - Setup ssh config and keys
  - Disable pi login
+ - [optional] static ip configuration
 `,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Println("Provisioning layer 1...")
@@ -103,6 +104,11 @@ func layer1(cmd *cobra.Command) error {
 		return err
 	}
 
+	staticIP, err := cmd.Flags().GetIP("static-ip")
+	if err != nil {
+		return err
+	}
+
 	address := fmt.Sprintf("%s:%d", host, port)
 
 	config := &ssh.ClientConfig{
@@ -136,6 +142,15 @@ func layer1(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
+
+	if len(staticIP) != 0 {
+		fmt.Printf("Setting up static ip %s\n", staticIP)
+		setupNetworking(conn, interfaceArgs{
+			ip:       staticIP,
+			password: loginPassword,
+		})
+	}
+
 	return nil
 }
 
@@ -343,6 +358,7 @@ func init() {
 	layer1Cmd.Flags().String("s3-bucket", "", "Amazon S3 bucket where the SSH public keys are stored")
 	layer1Cmd.Flags().String("s3-file", "", "Amazon S3 file where the SSH public keys are stored")
 	layer1Cmd.Flags().String("s3-region", "", "Amazon S3 region where the SSH public keys are stored")
+	layer1Cmd.Flags().IP("static-ip", nil, "Set up the static ip for eth0 and wlan0")
 
 	layer1Cmd.MarkFlagRequired("login-user")
 	layer1Cmd.MarkFlagRequired("login-password")
