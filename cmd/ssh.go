@@ -16,6 +16,36 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+type Connection struct {
+	config    *ssh.ClientConfig
+	password  string
+	useSSHKey bool
+	connected bool
+}
+
+func (c *Connection) Connect(user string, address string) (*ssh.Client, error) {
+	var auth []ssh.AuthMethod
+
+	if c.useSSHKey {
+		auth = append(auth, publicKey("~/.ssh/id_rsa"))
+	} else {
+		auth = append(auth, ssh.Password(c.password))
+	}
+
+	c.config = &ssh.ClientConfig{
+		User:            user,
+		Auth:            auth,
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+	}
+	conn, err := ssh.Dial("tcp", address, c.config)
+	if err != nil {
+		return &ssh.Client{}, fmt.Errorf("could not stablish ssh connection: %w", err)
+	}
+	return conn, nil
+}
+
+// func (c Connection)
+
 func basicSudoStdin(cmd string, password string) string {
 	return fmt.Sprintf("echo %s | sudo -S bash -c '%s'", password, cmd)
 }
