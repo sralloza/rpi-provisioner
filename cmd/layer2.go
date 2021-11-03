@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"strings"
 
+	funk "github.com/thoas/go-funk"
+
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/ssh"
 )
@@ -74,15 +76,39 @@ func ProvisionLayer2(args Layer2Args) error {
 	}
 	defer conn.Close()
 
+	fmt.Println("Updating and installing system libraries...")
 	if err := InstallLibraries(conn); err != nil {
 		return err
 	}
-	if err := InstallFish(conn, args); err != nil {
+	fmt.Println("Libraries updated successfully")
+
+	fmt.Println("Provisioning fish...")
+	if installed, err := InstallFish(conn, args); err != nil {
 		return err
+	} else if installed {
+		fmt.Println("fish provisioned successfully")
+	} else {
+		fmt.Println("fish already provisioned")
 	}
-	if err := InstallDocker(conn, args); err != nil {
+
+	fmt.Println("Provisioning docker...")
+	if installed, err := InstallDocker(conn, args); err != nil {
 		return err
+	} else if installed {
+		fmt.Println("docker provisioned successfully")
+	} else {
+		fmt.Println("docker already provisioned")
 	}
+
+	fmt.Println("Provisioning docker-compose...")
+	if installed, err := InstallDockerCompose(conn, args); err != nil {
+		return err
+	} else if installed {
+		fmt.Println("docker-compose provisioned successfully")
+	} else {
+		fmt.Println("docker-compose already provisioned")
+	}
+
 	return nil
 }
 
@@ -103,6 +129,7 @@ func InstallLibraries(conn *ssh.Client) error {
 		"cron",
 		"curl",
 		"git",
+		"libffi-dev",
 		"nano",
 		"python3-pip",
 		"python3",
@@ -117,107 +144,136 @@ func InstallLibraries(conn *ssh.Client) error {
 	return nil
 }
 
-func InstallFish(conn *ssh.Client, args Layer2Args) error {
-	_, _, err := runCommand("echo 'deb http://download.opensuse.org/repositories/shells:/fish:/release:/3/Debian_10/ /' | sudo tee /etc/apt/sources.list.d/shells:fish:release:3.list", conn)
+func InstallFish(conn *ssh.Client, args Layer2Args) (bool, error) {
+	_, _, err := runCommand("which fish", conn)
+	if err == nil {
+		fmt.Println("fish already installed")
+		return false, nil
+	}
+	_, _, err = runCommand("echo 'deb http://download.opensuse.org/repositories/shells:/fish:/release:/3/Debian_10/ /' | sudo tee /etc/apt/sources.list.d/shells:fish:release:3.list", conn)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	_, _, err = runCommand("curl -fsSL https://download.opensuse.org/repositories/shells:fish:release:3/Debian_10/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/shells_fish_release_3.gpg", conn)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	_, _, err = runCommand("sudo wget -nv https://download.opensuse.org/repositories/shells:fish:release:3/Debian_10/Release.key -O '/etc/apt/trusted.gpg.d/shells_fish_release_3.asc'", conn)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	_, _, err = runCommand(basicSudoStdin("apt update", ""), conn)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	_, _, err = runCommand(basicSudoStdin("apt install fish -y", ""), conn)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	chshCmd := fmt.Sprintf("chsh -s /usr/bin/fish %s", args.user)
 	_, _, err = runCommand(basicSudoStdin(chshCmd, ""), conn)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// # Oh My Fish
 	_, _, err = runCommand("curl -L https://get.oh-my.fish > /tmp/omf.sh", conn)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	_, _, err = runCommand("fish /tmp/omf.sh --noninteractive", conn)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	_, _, err = runCommand("rm /tmp/omf.sh", conn)
 	if err != nil {
-		return err
-	}
-
-	_, _, err = runCommand("ps", conn)
-	if err != nil {
-		return err
+		return false, err
 	}
 
 	_, _, err = runCommand("echo omf install agnoster | fish", conn)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	_, _, err = runCommand("echo omf theme agnoster | fish", conn)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	_, _, err = runCommand("echo omf install bang-bang | fish", conn)
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	return nil
+	return true, nil
 }
 
-func InstallDocker(conn *ssh.Client, args Layer2Args) error {
-	_, _, err := runCommand("curl -fsSL https://get.docker.com -o /tmp/get-docker.sh", conn)
+func InstallDocker(conn *ssh.Client, args Layer2Args) (bool, error) {
+	_, _, err := runCommand("which docker", conn)
+	if err == nil {
+		fmt.Println("Docker already installed")
+		return false, nil
+	}
+	_, _, err = runCommand("curl -fsSL https://get.docker.com -o /tmp/get-docker.sh", conn)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	_, _, err = runCommand("sudo sh /tmp/get-docker.sh", conn)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	_, _, err = runCommand("rm /tmp/get-docker.sh", conn)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	_, _, err = runCommand(fmt.Sprintf("sudo usermod -aG docker %s", args.user), conn)
 	if err != nil {
-		return err
+		return false, err
+	}
+
+	return true, nil
+}
+
+func InstallDockerCompose(conn *ssh.Client, args Layer2Args) (bool, error) {
+	_, _, err := runCommand("which docker-compose", conn)
+	if err == nil {
+		return false, nil
+	}
+
+	_, _, err = runCommand("mkdir -p ~/.local/bin", conn)
+	if err != nil {
+		return false, err
+	}
+
+	localBinPath := fmt.Sprintf("/home/%s/.local/bin", args.user)
+
+	paths, _, err := runCommand("bash -c \"echo $PATH\"", conn)
+	if err != nil {
+		return false, err
+	}
+	pathList := strings.Split(strings.Trim(paths, "\n"), ":")
+
+	if !funk.Contains(pathList, localBinPath) {
+		_, _, err = runCommand(fmt.Sprintf("echo fish_add_path %s | fish", localBinPath), conn)
+		if err != nil {
+			return false, err
+		}
 	}
 
 	_, _, err = runCommand("python3 -m pip install docker-compose", conn)
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	_, _, err = runCommand(fmt.Sprintf("echo fish_add_path /home/%s/.local/bin/ | fish", args.user), conn)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return true, nil
 }
