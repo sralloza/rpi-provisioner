@@ -204,7 +204,7 @@ func InstallDocker(conn *ssh.Client, args Layer2Args) error {
 		return err
 	}
 
-	_, _, err = runCommand(fmt.Sprintf("usermod -aG docker %s", args.user), conn)
+	_, _, err = runCommand(fmt.Sprintf("sudo usermod -aG docker %s", args.user), conn)
 	if err != nil {
 		return err
 	}
