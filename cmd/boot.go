@@ -25,43 +25,56 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// bootCmd represents the boot command
-var bootCmd = &cobra.Command{
-	Use:   "boot [BOOT_PATH]",
-	Short: "Setup image before first boot",
-	Long:  `Enable ssh, modify cmdline.txt and setup wifi connection`,
-	Args: func(cmd *cobra.Command, args []string) error {
-		if len(args) != 1 {
-			return fmt.Errorf("BOOT_PATH is required")
-		}
-		bootPath := args[0]
-		if !isDirectory(bootPath) {
-			return fmt.Errorf("'%s' is not a directory", bootPath)
-		}
+type BootArgs struct {
+	wifiSSID    string
+	wifiPass    string
+	cmdlineArgs []string
+}
 
-		cmdLinePath := filepath.Join(bootPath, "cmdline.txt")
-		_, err := os.Stat(cmdLinePath)
-		if err != nil {
-			return fmt.Errorf("cmdline.txt ('%s') does not exist", cmdLinePath)
-		}
-		return nil
-	},
-	PreRunE: func(cmd *cobra.Command, args []string) error {
-		wifi_ssid, _ := cmd.Flags().GetString("wifi-ssid")
-		wifi_pass, _ := cmd.Flags().GetString("wifi-pass")
+func NewBootCmd() *cobra.Command {
+	args := BootArgs{}
+	var bootCmd = &cobra.Command{
+		Use:   "boot [BOOT_PATH]",
+		Short: "Setup image before first boot",
+		Long:  `Enable ssh, modify cmdline.txt and setup wifi connection`,
+		Args: func(cmd *cobra.Command, posArgs []string) error {
+			if len(posArgs) != 1 {
+				return fmt.Errorf("BOOT_PATH is required")
+			}
+			bootPath := posArgs[0]
+			if !isDirectory(bootPath) {
+				return fmt.Errorf("'%s' is not a directory", bootPath)
+			}
 
-		if len(wifi_pass) == 0 && len(wifi_ssid) != 0 {
-			return fmt.Errorf("You passed --wifi-ssid, you need to specify --wifi-pass")
-		}
-		if len(wifi_pass) != 0 && len(wifi_ssid) == 0 {
-			return fmt.Errorf("You passed --wifi-pass, you need to specify --wifi-ssid")
-		}
-		return nil
-	},
+			cmdLinePath := filepath.Join(bootPath, "cmdline.txt")
+			_, err := os.Stat(cmdLinePath)
+			if err != nil {
+				return fmt.Errorf("cmdline.txt ('%s') does not exist", cmdLinePath)
+			}
+			return nil
+		},
+		PreRunE: func(cmd *cobra.Command, posArgs []string) error {
+			if len(args.wifiPass) == 0 && len(args.wifiSSID) != 0 {
+				return fmt.Errorf("you passed --wifi-ssid, you need to specify --wifi-pass")
+			}
+			if len(args.wifiPass) != 0 && len(args.wifiSSID) == 0 {
+				return fmt.Errorf("you passed --wifi-pass, you need to specify --wifi-ssid")
+			}
+			return nil
+		},
 
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return run(cmd, args[0])
-	},
+		RunE: func(cmd *cobra.Command, posArgs []string) error {
+			return setupBoot(args, posArgs[0])
+		},
+	}
+
+	defaultArgs := []string{"cgroup_enable=cpuset", "cgroup_enable=memory", "cgroup_memory=1"}
+
+	bootCmd.Flags().StringVar(&args.wifiSSID, "wifi-ssid", "", "WiFi SSID")
+	bootCmd.Flags().StringVar(&args.wifiPass, "wifi-pass", "", "WiFi password")
+	bootCmd.Flags().StringArrayVar(&args.cmdlineArgs, "cmdline", defaultArgs, "Extra args to append to cmdline.txt")
+
+	return bootCmd
 }
 
 func isDirectory(path string) bool {
@@ -134,46 +147,23 @@ func addCmdlineArgs(bootPath string, args []string) error {
 
 }
 
-func run(cmd *cobra.Command, bootPath string) error {
-	wifiSSID, _ := cmd.Flags().GetString("wifi-ssid")
-	wifiPass, _ := cmd.Flags().GetString("wifi-pass")
-	cmdlineArgs, _ := cmd.Flags().GetStringArray("cmdline")
-
+func setupBoot(args BootArgs, bootPath string) error {
 	err := enableSSH(bootPath)
 	if err != nil {
 		return err
 	}
-	if len(wifiSSID) == 0 && len(wifiPass) == 0 {
+	if len(args.wifiSSID) == 0 && len(args.wifiPass) == 0 {
 		println("Skipping setting up Wifi connection")
 	} else {
-		err = setup_wifi_connection(bootPath, wifiSSID, wifiPass)
+		err = setup_wifi_connection(bootPath, args.wifiSSID, args.wifiPass)
 		if err != nil {
 			return err
 		}
 	}
-	err = addCmdlineArgs(bootPath, cmdlineArgs)
+	err = addCmdlineArgs(bootPath, args.cmdlineArgs)
 	if err != nil {
 		return err
 	}
 
 	return nil
-}
-
-func init() {
-	rootCmd.AddCommand(bootCmd)
-	defaultArgs := []string{"cgroup_enable=cpuset", "cgroup_enable=memory", "cgroup_memory=1"}
-
-	bootCmd.Flags().String("wifi-ssid", "", "WiFi SSID")
-	bootCmd.Flags().String("wifi-pass", "", "WiFi password")
-	bootCmd.Flags().StringArray("cmdline", defaultArgs, "Extra args to append to cmdline.txt")
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// bootCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// bootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }

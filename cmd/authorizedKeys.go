@@ -38,7 +38,7 @@ func NewAuthorizedKeysCmd() *cobra.Command {
 		Use:   "authorized-keys",
 		Short: "Update authorized keys",
 		Long:  `Download keys from the S3 bucket and update them.`,
-		RunE: func(cmd *cobra.Command, rawArgs []string) error {
+		RunE: func(cmd *cobra.Command, posArgs []string) error {
 			return updateAuthorizedKeys(args)
 		},
 	}

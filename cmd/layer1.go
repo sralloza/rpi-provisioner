@@ -51,7 +51,6 @@ type Layer1Settings struct {
 	rootPassword     string
 }
 
-// layer1Cmd represents the layer1 command
 func NewLayer1Cmd() *cobra.Command {
 	args := Layer1Args{}
 	var layer1Cmd = &cobra.Command{
@@ -64,7 +63,7 @@ func NewLayer1Cmd() *cobra.Command {
  - Disable pi login
  - [optional] static ip configuration
  `,
-		RunE: func(cmd *cobra.Command, rawArgs []string) error {
+		RunE: func(cmd *cobra.Command, posArgs []string) error {
 			fmt.Println("Provisioning layer 1...")
 			if err := layer1(args); err != nil {
 				return err

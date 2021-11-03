@@ -38,6 +38,7 @@ func init() {
 	rootCmd.AddCommand(NewLayer1Cmd())
 	rootCmd.AddCommand(NewAuthorizedKeysCmd())
 	rootCmd.AddCommand(NewNetworkingCmd())
+	rootCmd.AddCommand(NewBootCmd())
 
 	rootCmd.PersistentFlags().Bool("debug", false, "Enable debug")
 }
