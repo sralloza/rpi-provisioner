@@ -17,12 +17,26 @@ package cmd
 
 import (
 	"fmt"
+	"net"
 	"strings"
 
 	"golang.org/x/crypto/ssh"
 
 	"github.com/spf13/cobra"
 )
+
+type Layer1Args struct {
+	loginUser        string
+	loginPassword    string
+	deployerUser     string
+	deployerPassword string
+	rootPassword     string
+	host             string
+	hostname         string
+	port             int
+	s3Path           string
+	staticIP         net.IP
+}
 
 type Layer1Settings struct {
 	loginUser        string
@@ -38,92 +52,67 @@ type Layer1Settings struct {
 }
 
 // layer1Cmd represents the layer1 command
-var layer1Cmd = &cobra.Command{
-	Use:   "layer1",
-	Short: "Provision layer 1",
-	Long: `Layer 1 uses the default user and bash shell. It consists of:
+func NewLayer1Cmd() *cobra.Command {
+	args := Layer1Args{}
+	var layer1Cmd = &cobra.Command{
+		Use:   "layer1",
+		Short: "Provision layer 1",
+		Long: `Layer 1 uses the default user and bash shell. It consists of:
  - Create deployer user
  - Set hostname
  - Setup ssh config and keys
  - Disable pi login
  - [optional] static ip configuration
-`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Println("Provisioning layer 1...")
-		if err := layer1(cmd); err != nil {
-			return err
-		}
+ `,
+		RunE: func(cmd *cobra.Command, rawArgs []string) error {
+			fmt.Println("Provisioning layer 1...")
+			if err := layer1(args); err != nil {
+				return err
+			}
 
-		fmt.Println("\nLayer 1 provisioned successfully")
-		fmt.Println(
-			"Note: you must restart the server to apply the hostname change " +
-				"and suppress the security risk warning")
-		fmt.Println("\nContinue with layer 2 or ssh into server:")
-		deployerUser, _ := cmd.Flags().GetString("deployer-user")
-		host, _ := cmd.Flags().GetString("host")
-		fmt.Printf("  ssh %s@%s\n", deployerUser, host)
-		return nil
-	},
+			fmt.Println("\nLayer 1 provisioned successfully")
+			fmt.Println(
+				"Note: you must restart the server to apply the hostname change " +
+					"and suppress the security risk warning")
+			fmt.Println("\nContinue with layer 2 or ssh into server:")
+			fmt.Printf("  ssh %s@%s\n", args.deployerUser, args.host)
+			return nil
+		},
+	}
+
+	layer1Cmd.Flags().StringVar(&args.loginUser, "login-user", "", "Login user")
+	layer1Cmd.Flags().StringVar(&args.loginPassword, "login-password", "", "Login password")
+	layer1Cmd.Flags().StringVar(&args.deployerPassword, "deployer-user", "", "Deployer user")
+	layer1Cmd.Flags().StringVar(&args.deployerUser,"deployer-password", "", "Deployer password")
+	layer1Cmd.Flags().StringVar(&args.rootPassword,"root-password", "", "Root password")
+	layer1Cmd.Flags().StringVar(&args.host,"host", "", "Server host")
+	layer1Cmd.Flags().StringVar(&args.hostname,"hostname", "", "Server hostname")
+	layer1Cmd.Flags().IntVar(&args.port, "port", 22, "Server SSH port")
+	layer1Cmd.Flags().StringVar(&args.s3Path,"s3-path", "", "Amazon S3 path. Must match the pattern region/bucket/file")
+	layer1Cmd.Flags().IPVar(&args.staticIP,"static-ip", nil, "Set up the static ip for eth0 and wlan0")
+
+	layer1Cmd.MarkFlagRequired("login-user")
+	layer1Cmd.MarkFlagRequired("login-password")
+	layer1Cmd.MarkFlagRequired("deployer-user")
+	layer1Cmd.MarkFlagRequired("deployer-password")
+	layer1Cmd.MarkFlagRequired("host")
+	layer1Cmd.MarkFlagRequired("host-name")
+	layer1Cmd.MarkFlagRequired("s3-path")
+	return layer1Cmd
 }
 
-func layer1(cmd *cobra.Command) error {
-	loginUser, err := cmd.Flags().GetString("login-user")
+func layer1(args Layer1Args) error {
+	s3Region, s3Bucket, s3File, err := splitAwsPath(args.s3Path)
 	if err != nil {
 		return err
 	}
 
-	loginPassword, err := cmd.Flags().GetString("login-password")
-	if err != nil {
-		return err
-	}
-
-	deployerUser, err := cmd.Flags().GetString("deployer-user")
-	if err != nil {
-		return err
-	}
-
-	deployerPassword, err := cmd.Flags().GetString("deployer-password")
-	if err != nil {
-		return err
-	}
-
-	rootPassword, err := cmd.Flags().GetString("root-password")
-	if err != nil {
-		return err
-	}
-
-	host, err := cmd.Flags().GetString("host")
-	if err != nil {
-		return err
-	}
-	hostName, err := cmd.Flags().GetString("hostname")
-	if err != nil {
-		return err
-	}
-
-	s3Path, err := cmd.Flags().GetString("s3-path")
-	if err != nil {
-		return err
-	}
-
-	s3Region, s3Bucket, s3File, err := splitAwsPath(s3Path)
-	if err != nil {
-		return err
-	}
-
-	port, err := cmd.Flags().GetInt("port")
-	if err != nil {
-		return err
-	}
-
-	staticIP, _ := cmd.Flags().GetIP("static-ip")
-
-	address := fmt.Sprintf("%s:%d", host, port)
+	address := fmt.Sprintf("%s:%d", args.host, args.port)
 
 	config := &ssh.ClientConfig{
-		User: loginUser,
+		User: args.loginUser,
 		Auth: []ssh.AuthMethod{
-			ssh.Password(loginPassword),
+			ssh.Password(args.loginPassword),
 		},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
@@ -138,26 +127,26 @@ func layer1(cmd *cobra.Command) error {
 	defer conn.Close()
 
 	err = setupDeployer(conn, Layer1Settings{
-		loginUser:        loginUser,
-		loginPassword:    loginPassword,
-		deployerGroup:    deployerUser,
-		deployerUser:     deployerUser,
-		deployerPassword: deployerPassword,
-		hostname:         hostName,
+		loginUser:        args.loginUser,
+		loginPassword:    args.loginPassword,
+		deployerGroup:    args.deployerUser,
+		deployerUser:     args.deployerUser,
+		deployerPassword: args.deployerPassword,
+		hostname:         args.hostname,
 		s3Bucket:         s3Bucket,
 		s3File:           s3File,
 		s3Region:         s3Region,
-		rootPassword:     rootPassword,
+		rootPassword:     args.rootPassword,
 	})
 	if err != nil {
 		return err
 	}
 
-	if len(staticIP) != 0 {
-		fmt.Printf("Setting up static ip %s\n", staticIP)
+	if len(args.staticIP) != 0 {
+		fmt.Printf("Setting up static ip %s\n", args.staticIP)
 		setupNetworking(conn, interfaceArgs{
-			ip:       staticIP,
-			password: loginPassword,
+			ip:       args.staticIP,
+			password: args.loginPassword,
 		})
 	}
 
@@ -371,36 +360,4 @@ func disableLoginUser(conn *ssh.Client, settings Layer1Settings) error {
 		return err
 	}
 	return nil
-}
-
-func init() {
-	rootCmd.AddCommand(layer1Cmd)
-	layer1Cmd.Flags().String("login-user", "", "Login user")
-	layer1Cmd.Flags().String("login-password", "", "Login password")
-	layer1Cmd.Flags().String("deployer-user", "", "Deployer user")
-	layer1Cmd.Flags().String("deployer-password", "", "Deployer password")
-	layer1Cmd.Flags().String("root-password", "", "Root password")
-	layer1Cmd.Flags().String("host", "", "Server host")
-	layer1Cmd.Flags().String("hostname", "", "Server hostname")
-	layer1Cmd.Flags().Int("port", 22, "Server SSH port")
-	layer1Cmd.Flags().String("s3-path", "", "Amazon S3 path. Must match the pattern region/bucket/file")
-	layer1Cmd.Flags().IP("static-ip", nil, "Set up the static ip for eth0 and wlan0")
-
-	layer1Cmd.MarkFlagRequired("login-user")
-	layer1Cmd.MarkFlagRequired("login-password")
-	layer1Cmd.MarkFlagRequired("deployer-user")
-	layer1Cmd.MarkFlagRequired("deployer-password")
-	layer1Cmd.MarkFlagRequired("host")
-	layer1Cmd.MarkFlagRequired("host-name")
-	layer1Cmd.MarkFlagRequired("s3-path")
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// layer1Cmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// layer1Cmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
