@@ -109,15 +109,20 @@ type interfaceArgs struct {
 func setupNetworking(conn *ssh.Client, args interfaceArgs) error {
 	// the lowest metric has priority -> eth0
 	fmt.Println("Setting static ip for interface eth0")
-	err := setupStaticIPIface(conn, args, "eth0", 100)
+	eth0Provisioned, err := provisionStaticIPIface(conn, args, "eth0", 100)
 	if err != nil {
 		return err
 	}
 
 	fmt.Println("Setting static ip for interface wlan0")
-	err = setupStaticIPIface(conn, args, "wlan0", 200)
+	wlan0Provisioned, err := provisionStaticIPIface(conn, args, "wlan0", 200)
 	if err != nil {
 		return err
+	}
+
+	if !eth0Provisioned && !wlan0Provisioned {
+		fmt.Println("Skipping DHCP restart as no interface has been provisioned")
+		return nil
 	}
 
 	fmt.Println("Restarting DHCP")
@@ -129,19 +134,28 @@ func setupNetworking(conn *ssh.Client, args interfaceArgs) error {
 	return nil
 }
 
-func setupStaticIPIface(conn *ssh.Client, args interfaceArgs, iface string, metric int) error {
+func provisionStaticIPIface(conn *ssh.Client, args interfaceArgs, iface string, metric int) (bool, error) {
 	routerIP, err := getRouterIP(conn)
 	if err != nil {
-		return err
+		return false, err
 	}
 	dhcpConfiguration := generateStaticDHCPConfiguration(iface, args.ip, routerIP, metric)
+	if err != nil {
+		return false, err
+	}
+
+	// TODO: override interface settings (detect start and end)
+	if strings.Contains(fmt.Sprintf("interface %s", iface), dhcpConfiguration) {
+		println("Interface already setup (may be wrongly set up, though)")
+		return false, nil
+	}
 
 	catCmd := fmt.Sprintf("echo \"%s\" >> /etc/dhcpcd.conf", dhcpConfiguration)
 	_, _, err = runCommand(basicSudoStdin(catCmd, args.password), conn)
 	if err != nil {
-		return err
+		return false, err
 	}
-	return nil
+	return true, nil
 }
 
 func getRouterIP(conn *ssh.Client) (net.IP, error) {
