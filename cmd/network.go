@@ -25,71 +25,63 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// networkingCmd represents the networking command
-var networkingCmd = &cobra.Command{
-	Use:   "network",
-	Short: "Provision networking",
-	Long:  `Set up static ip for eth0 and wlan0`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Println("Provisioning network")
-		if err := networkingEntrypoint(cmd); err != nil {
-			return err
-		}
-		ip, _ := cmd.Flags().GetIP("ip")
-		fmt.Println("Network provisioned successfully")
-		fmt.Println("Static ip: " + ip.String())
-		return nil
-	},
+type NetworkingArgs struct {
+	useSSHKey bool
+	user      string
+	password  string
+	host      string
+	port      int
+	ip        net.IP
 }
 
-func networkingEntrypoint(cmd *cobra.Command) error {
-	host, err := cmd.Flags().GetString("host")
-	if err != nil {
-		return err
-	}
-	if len(host) == 0 {
-		return errors.New("must specify --host")
+func NewNetworkingCmd() *cobra.Command {
+	args := NetworkingArgs{}
+
+	var networkingCmd = &cobra.Command{
+		Use:   "network",
+		Short: "Provision networking",
+		Long:  `Set up static ip for eth0 and wlan0`,
+		RunE: func(cmd *cobra.Command, rawArgs []string) error {
+			fmt.Println("Provisioning network")
+			if err := networkingEntrypoint(args); err != nil {
+				return err
+			}
+			ip, _ := cmd.Flags().GetIP("ip")
+			fmt.Println("Network provisioned successfully")
+			fmt.Println("Static ip: " + ip.String())
+			return nil
+		},
 	}
 
-	user, err := cmd.Flags().GetString("user")
-	if err != nil {
-		return err
-	}
+	networkingCmd.Flags().BoolVar(&args.useSSHKey, "ssh-key", false, "Use ssh key")
+	networkingCmd.Flags().StringVar(&args.user, "user", "", "Login user")
+	networkingCmd.Flags().StringVar(&args.password, "password", "", "Login password")
+	networkingCmd.Flags().StringVar(&args.host, "host", "", "Server host")
+	networkingCmd.Flags().IntVar(&args.port, "port", 22, "Server SSH port")
+	networkingCmd.Flags().IPVar(&args.ip, "ip", nil, "New IP")
 
-	password, err := cmd.Flags().GetString("password")
-	if err != nil {
-		return err
-	}
+	networkingCmd.MarkFlagRequired("user")
+	networkingCmd.MarkFlagRequired("host")
+	networkingCmd.MarkFlagRequired("ip")
+	return networkingCmd
+}
 
-	usesshKey, err := cmd.Flags().GetBool("ssh-key")
-	if err != nil {
-		return err
-	}
-	if !usesshKey && len(password) == 0 {
+func networkingEntrypoint(args NetworkingArgs) error {
+	if !args.useSSHKey && len(args.password) == 0 {
 		return errors.New("must pass --ssh-key or --password")
 	}
 
-	port, err := cmd.Flags().GetInt("port")
-	if err != nil {
-		return err
-	}
-
-	ip, err := cmd.Flags().GetIP("ip")
-	if err != nil {
-		return err
-	}
-
-	address := fmt.Sprintf("%s:%d", host, port)
+	address := fmt.Sprintf("%s:%d", args.host, args.port)
 
 	var auth []ssh.AuthMethod
 
-	if usesshKey {
+	if args.useSSHKey {
 		auth = append(auth, publicKey(expandPath("~/.ssh/id_rsa")))
 	} else {
-		auth = append(auth, ssh.Password(password))
+		auth = append(auth, ssh.Password(args.password))
 	}
 	config := &ssh.ClientConfig{
-		User:            user,
+		User:            args.user,
 		Auth:            auth,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
@@ -100,8 +92,8 @@ func networkingEntrypoint(cmd *cobra.Command) error {
 	defer conn.Close()
 
 	err = setupNetworking(conn, interfaceArgs{
-		ip:       ip,
-		password: password,
+		ip:       args.ip,
+		password: args.password,
 	})
 	if err != nil {
 		return err
@@ -183,28 +175,4 @@ func rebootdhcpd(conn *ssh.Client, password string) error {
 		return err
 	}
 	return nil
-}
-
-func init() {
-	rootCmd.AddCommand(networkingCmd)
-
-	networkingCmd.Flags().Bool("ssh-key", false, "Use ssh key")
-	networkingCmd.Flags().String("user", "", "Login user")
-	networkingCmd.Flags().String("password", "", "Login password")
-	networkingCmd.Flags().String("host", "", "Server host")
-	networkingCmd.Flags().Int("port", 22, "Server SSH port")
-	networkingCmd.Flags().IP("ip", nil, "New IP")
-
-	networkingCmd.MarkFlagRequired("user")
-	networkingCmd.MarkFlagRequired("host")
-	networkingCmd.MarkFlagRequired("ip")
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// networkingCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// networkingCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
