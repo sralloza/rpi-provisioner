@@ -143,7 +143,8 @@ func InstallFish(conn *ssh.Client, args Layer2Args) error {
 		return err
 	}
 
-	_, _, err = runCommand(basicSudoStdin("chsh -s /usr/bin/fish {settings.deployer_user}", ""), conn)
+	chshCmd := fmt.Sprintf("chsh -s /usr/bin/fish %s", args.user)
+	_, _, err = runCommand(basicSudoStdin(chshCmd, ""), conn)
 	if err != nil {
 		return err
 	}

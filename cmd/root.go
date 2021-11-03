@@ -36,6 +36,8 @@ func Execute() {
 
 func init() {
 	rootCmd.AddCommand(NewLayer1Cmd())
+	rootCmd.AddCommand(NewLayer2Cmd())
+
 	rootCmd.AddCommand(NewAuthorizedKeysCmd())
 	rootCmd.AddCommand(NewNetworkingCmd())
 	rootCmd.AddCommand(NewBootCmd())
