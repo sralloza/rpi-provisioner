@@ -20,7 +20,6 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/crypto/ssh"
 )
 
 type authorizedKeysArgs struct {
@@ -67,23 +66,16 @@ func updateAuthorizedKeys(args authorizedKeysArgs) error {
 
 	address := fmt.Sprintf("%s:%d", args.host, args.port)
 
-	var auth []ssh.AuthMethod
+	conn := SSHConnection{
+		password:  args.password,
+		useSSHKey: args.useSSHKey,
+	}
 
-	if args.useSSHKey {
-		auth = append(auth, publicKey("~/.ssh/id_rsa"))
-	} else {
-		auth = append(auth, ssh.Password(args.password))
-	}
-	config := &ssh.ClientConfig{
-		User:            args.user,
-		Auth:            auth,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-	}
-	conn, err := ssh.Dial("tcp", address, config)
+	err = conn.Connect(args.user, address)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer conn.close()
 
 	err = uploadsshKeys(conn, UploadsshKeysArgs{
 		user:     args.user,

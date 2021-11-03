@@ -22,7 +22,6 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/crypto/ssh"
 )
 
 type NetworkingArgs struct {
@@ -73,23 +72,16 @@ func networkingEntrypoint(args NetworkingArgs) error {
 
 	address := fmt.Sprintf("%s:%d", args.host, args.port)
 
-	var auth []ssh.AuthMethod
+	conn := SSHConnection{
+		password:  args.password,
+		useSSHKey: args.useSSHKey,
+	}
 
-	if args.useSSHKey {
-		auth = append(auth, publicKey(expandPath("~/.ssh/id_rsa")))
-	} else {
-		auth = append(auth, ssh.Password(args.password))
-	}
-	config := &ssh.ClientConfig{
-		User:            args.user,
-		Auth:            auth,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-	}
-	conn, err := ssh.Dial("tcp", address, config)
+	err := conn.Connect(args.user, address)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer conn.close()
 
 	err = setupNetworking(conn, interfaceArgs{
 		ip:       args.ip,
@@ -106,7 +98,7 @@ type interfaceArgs struct {
 	password string
 }
 
-func setupNetworking(conn *ssh.Client, args interfaceArgs) error {
+func setupNetworking(conn SSHConnection, args interfaceArgs) error {
 	// the lowest metric has priority -> eth0
 	fmt.Println("Setting static ip for interface eth0")
 	eth0Provisioned, err := provisionStaticIPIface(conn, args, "eth0", 100)
@@ -134,7 +126,7 @@ func setupNetworking(conn *ssh.Client, args interfaceArgs) error {
 	return nil
 }
 
-func provisionStaticIPIface(conn *ssh.Client, args interfaceArgs, iface string, metric int) (bool, error) {
+func provisionStaticIPIface(conn SSHConnection, args interfaceArgs, iface string, metric int) (bool, error) {
 	routerIP, err := getRouterIP(conn)
 	if err != nil {
 		return false, err
@@ -151,16 +143,16 @@ func provisionStaticIPIface(conn *ssh.Client, args interfaceArgs, iface string, 
 	}
 
 	catCmd := fmt.Sprintf("echo \"%s\" >> /etc/dhcpcd.conf", dhcpConfiguration)
-	_, _, err = runCommand(basicSudoStdin(catCmd, args.password), conn)
+	_, _, err = conn.runSudoPassword(catCmd, args.password)
 	if err != nil {
 		return false, err
 	}
 	return true, nil
 }
 
-func getRouterIP(conn *ssh.Client) (net.IP, error) {
+func getRouterIP(conn SSHConnection) (net.IP, error) {
 	iprCmd := "ip r | grep default"
-	data, _, err := runCommand(iprCmd, conn)
+	data, _, err := conn.run(iprCmd)
 	if err != nil {
 		return nil, fmt.Errorf("error executing ip r command: %w", err)
 	}
@@ -183,8 +175,8 @@ metric %d
 	return fmt.Sprintf(template, iface, IP, routerIP, metric)
 }
 
-func rebootdhcpd(conn *ssh.Client, password string) error {
-	_, _, err := runCommand(basicSudoStdin("systemctl restart dhcpcd.service", password), conn)
+func rebootdhcpd(conn SSHConnection, password string) error {
+	_, _, err := conn.runSudoPassword("systemctl restart dhcpcd.service", password)
 	if err != nil {
 		return err
 	}

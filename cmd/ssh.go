@@ -16,14 +16,14 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-type Connection struct {
+type SSHConnection struct {
 	config    *ssh.ClientConfig
+	conn      *ssh.Client
 	password  string
 	useSSHKey bool
-	connected bool
 }
 
-func (c *Connection) Connect(user string, address string) (*ssh.Client, error) {
+func (c *SSHConnection) Connect(user string, address string) error {
 	var auth []ssh.AuthMethod
 
 	if c.useSSHKey {
@@ -39,12 +39,27 @@ func (c *Connection) Connect(user string, address string) (*ssh.Client, error) {
 	}
 	conn, err := ssh.Dial("tcp", address, c.config)
 	if err != nil {
-		return &ssh.Client{}, fmt.Errorf("could not stablish ssh connection: %w", err)
+		return fmt.Errorf("could not stablish ssh connection: %w", err)
 	}
-	return conn, nil
+	c.conn = conn
+	return nil
 }
 
-// func (c Connection)
+func (c SSHConnection) run(cmd string) (string, string, error) {
+	return runCommand(cmd, c.conn)
+}
+
+func (c SSHConnection) runSudo(cmd string) (string, string, error) {
+	return c.run(basicSudoStdin(cmd, ""))
+}
+
+func (c SSHConnection) runSudoPassword(cmd string, password string) (string, string, error) {
+	return c.run(basicSudoStdin(cmd, password))
+}
+
+func (c SSHConnection) close() {
+	c.conn.Close()
+}
 
 func basicSudoStdin(cmd string, password string) string {
 	return fmt.Sprintf("echo %s | sudo -S bash -c '%s'", password, cmd)
@@ -88,24 +103,17 @@ type UploadsshKeysArgs struct {
 	s3Region string
 }
 
-func dynamicSudo(cmd string, password string) string {
-	if len(password) != 0 {
-		return basicSudoStdin(cmd, password)
-	}
-	return fmt.Sprintf("sudo bash -c '%s'", cmd)
-}
-
-func uploadsshKeys(conn *ssh.Client, args UploadsshKeysArgs) error {
+func uploadsshKeys(conn SSHConnection, args UploadsshKeysArgs) error {
 	fmt.Println("Updating SSH keys")
 
 	mkdirCmd := fmt.Sprintf("mkdir -p /home/%s/.ssh", args.user)
-	_, _, err := runCommand(mkdirCmd, conn)
+	_, _, err := conn.run(mkdirCmd)
 	if err != nil {
 		return err
 	}
 
 	catCmd := fmt.Sprintf("cat /home/%s/.ssh/authorized_keys", args.user)
-	fileContent, _, err := runCommand(catCmd, conn)
+	fileContent, _, err := conn.run(catCmd)
 	var authorizedKeys []string
 	if err != nil {
 		authorizedKeys = []string{}
@@ -140,7 +148,7 @@ func uploadsshKeys(conn *ssh.Client, args UploadsshKeysArgs) error {
 	}
 
 	updateKeysCmd := fmt.Sprintf("echo \"%s\" > /home/%s/.ssh/authorized_keys", newFileContent, args.user)
-	_, _, err = runCommand(dynamicSudo(updateKeysCmd, args.password), conn)
+	_, _, err = conn.runSudoPassword(updateKeysCmd, args.password)
 	if err != nil {
 		return err
 	}
@@ -150,26 +158,26 @@ func uploadsshKeys(conn *ssh.Client, args UploadsshKeysArgs) error {
 
 	fmt.Println("Fixing permissions of user's .ssh files")
 	chmodsshCmd := fmt.Sprintf("chmod 700 %s", sshFolder)
-	_, _, err = runCommand(dynamicSudo(chmodsshCmd, args.password), conn)
+	_, _, err = conn.runSudoPassword(chmodsshCmd, args.password)
 	if err != nil {
 		return err
 	}
 
 	chmodAkpath := fmt.Sprintf("chmod 600 %s", authorizedKeysPath)
-	_, _, err = runCommand(dynamicSudo(chmodAkpath, args.password), conn)
+	_, _, err = conn.runSudoPassword(chmodAkpath, args.password)
 	if err != nil {
 		return err
 	}
 
 	ownership := fmt.Sprintf("%s:%s", args.user, args.group)
 	chownsshCmd := fmt.Sprintf("chown %s %s", ownership, sshFolder)
-	_, _, err = runCommand(dynamicSudo(chownsshCmd, args.password), conn)
+	_, _, err = conn.runSudoPassword(chownsshCmd, args.password)
 	if err != nil {
 		return err
 	}
 
 	chownAkpCmd := fmt.Sprintf("chown %s %s", ownership, authorizedKeysPath)
-	_, _, err = runCommand(dynamicSudo(chownAkpCmd, args.password), conn)
+	_, _, err = conn.runSudoPassword(chownAkpCmd, args.password)
 	if err != nil {
 		return err
 	}
