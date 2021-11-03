@@ -17,35 +17,206 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/crypto/ssh"
 )
 
-// layer2Cmd represents the layer2 command
-var layer2Cmd = &cobra.Command{
-	Use:   "layer2",
-	Short: "Provision layer 2",
-	Long: `Layer 2 uses the deployer user and bash. It consists of:
-- Update and upgrade packages
-- Install libraries: build-essential, cmake, cron, curl, git, libffi-dev, nano, python3-pip, python3, wget
-- Install fish
-- Install docker
-`,
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("layer2 called")
-	},
+type Layer2Args struct {
+	user string
+	host string
+	port int
 }
 
-func init() {
-	rootCmd.AddCommand(layer2Cmd)
+func NewLayer2Cmd() *cobra.Command {
+	args := Layer2Args{}
+	var layer2Cmd = &cobra.Command{
+		Use:   "layer2",
+		Short: "Provision layer 2",
+		Long: `Layer 2 uses the deployer user and bash. It consists of:
+		- Update and upgrade packages
+		- Install libraries: build-essential, cmake, cron, curl, git, libffi-dev, nano, python3-pip, python3, wget
+		- Install fish
+		- Install docker
+		`,
+		RunE: func(cmd *cobra.Command, posArgs []string) error {
+			fmt.Println("Provisioning layer 2")
+			if err := ProvisionLayer2(args); err != nil {
+				return err
+			}
+			fmt.Println("Layer 2 provisioned")
+			return nil
+		},
+	}
 
-	// Here you will define your flags and configuration settings.
+	layer2Cmd.Flags().StringVar(&args.user, "user", "", "Login user")
+	layer2Cmd.Flags().StringVar(&args.host, "host", "", "Server host")
+	layer2Cmd.Flags().IntVar(&args.port, "port", 22, "Server SSH port")
 
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// layer2Cmd.PersistentFlags().String("foo", "", "A help for foo")
+	layer2Cmd.MarkFlagRequired("user")
+	layer2Cmd.MarkFlagRequired("host")
 
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// layer2Cmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	return layer2Cmd
+
+}
+
+func ProvisionLayer2(args Layer2Args) error {
+	address := fmt.Sprintf("%s:%d", args.host, args.port)
+	config := &ssh.ClientConfig{
+		User:            args.user,
+		Auth:            []ssh.AuthMethod{publicKey("~/.ssh/id_rsa")},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+	}
+	conn, err := ssh.Dial("tcp", address, config)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	if err := InstallLibraries(conn); err != nil {
+		return err
+	}
+	if err := InstallFish(conn, args); err != nil {
+		return err
+	}
+	if err := InstallDocker(conn, args); err != nil {
+		return err
+	}
+	return nil
+}
+
+func InstallLibraries(conn *ssh.Client) error {
+	_, _, err := runCommand(basicSudoStdin("apt-get update", ""), conn)
+	if err != nil {
+		return err
+	}
+
+	_, _, err = runCommand(basicSudoStdin("apt-get upgrade -y", ""), conn)
+	if err != nil {
+		return err
+	}
+
+	libraries := []string{
+		"build-essential",
+		"cmake",
+		"cron",
+		"curl",
+		"git",
+		"nano",
+		"python3-pip",
+		"python3",
+		"wget",
+	}
+	installCmd := fmt.Sprintf("apt-get install %s -y", strings.Join(libraries, " "))
+	_, _, err = runCommand(basicSudoStdin(installCmd, ""), conn)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func InstallFish(conn *ssh.Client, args Layer2Args) error {
+	_, _, err := runCommand("echo 'deb http://download.opensuse.org/repositories/shells:/fish:/release:/3/Debian_10/ /' | sudo tee /etc/apt/sources.list.d/shells:fish:release:3.list", conn)
+	if err != nil {
+		return err
+	}
+
+	_, _, err = runCommand("curl -fsSL https://download.opensuse.org/repositories/shells:fish:release:3/Debian_10/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/shells_fish_release_3.gpg", conn)
+	if err != nil {
+		return err
+	}
+
+	_, _, err = runCommand("sudo wget -nv https://download.opensuse.org/repositories/shells:fish:release:3/Debian_10/Release.key -O '/etc/apt/trusted.gpg.d/shells_fish_release_3.asc'", conn)
+	if err != nil {
+		return err
+	}
+
+	_, _, err = runCommand(basicSudoStdin("apt update", ""), conn)
+	if err != nil {
+		return err
+	}
+
+	_, _, err = runCommand(basicSudoStdin("apt install fish -y", ""), conn)
+	if err != nil {
+		return err
+	}
+
+	_, _, err = runCommand(basicSudoStdin("chsh -s /usr/bin/fish {settings.deployer_user}", ""), conn)
+	if err != nil {
+		return err
+	}
+
+	// # Oh My Fish
+	_, _, err = runCommand("curl -L https://get.oh-my.fish > /tmp/omf.sh", conn)
+	if err != nil {
+		return err
+	}
+
+	_, _, err = runCommand("fish /tmp/omf.sh --noninteractive", conn)
+	if err != nil {
+		return err
+	}
+
+	_, _, err = runCommand("rm /tmp/omf.sh", conn)
+	if err != nil {
+		return err
+	}
+
+	_, _, err = runCommand("ps", conn)
+	if err != nil {
+		return err
+	}
+
+	_, _, err = runCommand("echo omf install agnoster | fish", conn)
+	if err != nil {
+		return err
+	}
+
+	_, _, err = runCommand("echo omf theme agnoster | fish", conn)
+	if err != nil {
+		return err
+	}
+
+	_, _, err = runCommand("echo omf install bang-bang | fish", conn)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func InstallDocker(conn *ssh.Client, args Layer2Args) error {
+	_, _, err := runCommand("curl -fsSL https://get.docker.com -o /tmp/get-docker.sh", conn)
+	if err != nil {
+		return err
+	}
+
+	_, _, err = runCommand("sudo sh /tmp/get-docker.sh", conn)
+	if err != nil {
+		return err
+	}
+
+	_, _, err = runCommand("rm /tmp/get-docker.sh", conn)
+	if err != nil {
+		return err
+	}
+
+	_, _, err = runCommand(fmt.Sprintf("usermod -aG docker %s", args.user), conn)
+	if err != nil {
+		return err
+	}
+
+	_, _, err = runCommand("python3 -m pip install docker-compose", conn)
+	if err != nil {
+		return err
+	}
+
+	_, _, err = runCommand(fmt.Sprintf("echo fish_add_path /home/%s/.local/bin/ | fish", args.user), conn)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
