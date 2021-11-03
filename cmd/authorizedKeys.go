@@ -23,72 +23,59 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// authorizedKeysCmd represents the authorizedKeys command
-var authorizedKeysCmd = &cobra.Command{
-	Use:   "authorized-keys",
-	Short: "Update authorized keys",
-	Long:  `Download keys from the S3 bucket and update them.`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return updateAuthorizedKeys(cmd)
-	},
+type authorizedKeysArgs struct {
+	useSSHKey bool
+	user      string
+	password  string
+	host      string
+	port      int
+	s3Path    string
 }
 
-func updateAuthorizedKeys(cmd *cobra.Command) error {
-	host, err := cmd.Flags().GetString("host")
-	if err != nil {
-		return err
-	}
-	if len(host) == 0 {
-		return errors.New("must specify --host")
-	}
-
-	user, err := cmd.Flags().GetString("user")
-	if err != nil {
-		return err
-	}
-	if len(user) == 0 {
-		return errors.New("must specify --user")
+func NewAuthorizedKeysCmd() *cobra.Command {
+	args := authorizedKeysArgs{}
+	var authorizedKeysCmd = &cobra.Command{
+		Use:   "authorized-keys",
+		Short: "Update authorized keys",
+		Long:  `Download keys from the S3 bucket and update them.`,
+		RunE: func(cmd *cobra.Command, rawArgs []string) error {
+			return updateAuthorizedKeys(args)
+		},
 	}
 
-	password, err := cmd.Flags().GetString("password")
-	if err != nil {
-		return err
-	}
+	authorizedKeysCmd.Flags().BoolVar(&args.useSSHKey, "ssh-key", false, "Use ssh key")
+	authorizedKeysCmd.Flags().StringVar(&args.user, "user", "", "Login user")
+	authorizedKeysCmd.Flags().StringVar(&args.password, "password", "", "Login password")
+	authorizedKeysCmd.Flags().StringVar(&args.host, "host", "", "Server host")
+	authorizedKeysCmd.Flags().IntVar(&args.port, "port", 22, "Server SSH port")
+	authorizedKeysCmd.Flags().StringVar(&args.s3Path, "s3-path", "", "Amazon S3 path. Must match the pattern region/bucket/file")
 
-	usesshKey, err := cmd.Flags().GetBool("ssh-key")
-	if err != nil {
-		return err
-	}
-	if !usesshKey && len(password) == 0 {
+	authorizedKeysCmd.MarkFlagRequired("s3-path")
+
+	return authorizedKeysCmd
+}
+
+func updateAuthorizedKeys(args authorizedKeysArgs) error {
+	if !args.useSSHKey && len(args.password) == 0 {
 		return errors.New("must pass --ssh-key or --password")
 	}
 
-	s3Path, err := cmd.Flags().GetString("s3-path")
+	s3Region, s3Bucket, s3File, err := splitAwsPath(args.s3Path)
 	if err != nil {
 		return err
 	}
 
-	s3Region, s3Bucket, s3File, err := splitAwsPath(s3Path)
-	if err != nil {
-		return err
-	}
-
-	port, err := cmd.Flags().GetInt("port")
-	if err != nil {
-		return err
-	}
-
-	address := fmt.Sprintf("%s:%d", host, port)
+	address := fmt.Sprintf("%s:%d", args.host, args.port)
 
 	var auth []ssh.AuthMethod
 
-	if usesshKey {
+	if args.useSSHKey {
 		auth = append(auth, publicKey("~/.ssh/id_rsa"))
 	} else {
-		auth = append(auth, ssh.Password(password))
+		auth = append(auth, ssh.Password(args.password))
 	}
 	config := &ssh.ClientConfig{
-		User:            user,
+		User:            args.user,
 		Auth:            auth,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
@@ -99,9 +86,9 @@ func updateAuthorizedKeys(cmd *cobra.Command) error {
 	defer conn.Close()
 
 	err = uploadsshKeys(conn, UploadsshKeysArgs{
-		user:     user,
-		password: password,
-		group:    user,
+		user:     args.user,
+		password: args.password,
+		group:    args.user,
 		s3Bucket: s3Bucket,
 		s3File:   s3File,
 		s3Region: s3Region,
@@ -110,27 +97,4 @@ func updateAuthorizedKeys(cmd *cobra.Command) error {
 		return err
 	}
 	return nil
-}
-
-func init() {
-	rootCmd.AddCommand(authorizedKeysCmd)
-
-	authorizedKeysCmd.Flags().Bool("ssh-key", false, "Use ssh key")
-	authorizedKeysCmd.Flags().String("user", "", "Login user")
-	authorizedKeysCmd.Flags().String("password", "", "Login password")
-	authorizedKeysCmd.Flags().String("host", "", "Server host")
-	authorizedKeysCmd.Flags().Int("port", 22, "Server SSH port")
-	authorizedKeysCmd.Flags().String("s3-path", "", "Amazon S3 path. Must match the pattern region/bucket/file")
-
-	authorizedKeysCmd.MarkFlagRequired("s3-path")
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// authorizedKeysCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// authorizedKeysCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }

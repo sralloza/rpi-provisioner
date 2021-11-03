@@ -49,6 +49,7 @@ func Execute() {
 
 func init() {
 	rootCmd.AddCommand(NewLayer1Cmd())
+	rootCmd.AddCommand(NewAuthorizedKeysCmd())
 	// cobra.OnInitialize(initConfig)
 
 	// Here you will define your flags and configuration settings.
