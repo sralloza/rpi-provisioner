@@ -26,6 +26,7 @@ import (
 )
 
 type BootArgs struct {
+	country     string
 	wifiSSID    string
 	wifiPass    string
 	cmdlineArgs []string
@@ -70,6 +71,7 @@ func NewBootCmd() *cobra.Command {
 
 	defaultArgs := []string{"cgroup_enable=cpuset", "cgroup_enable=memory", "cgroup_memory=1"}
 
+	bootCmd.Flags().StringVar(&args.country, "country", "ES", "Country code (2 digits)")
 	bootCmd.Flags().StringVar(&args.wifiSSID, "wifi-ssid", "", "WiFi SSID")
 	bootCmd.Flags().StringVar(&args.wifiPass, "wifi-pass", "", "WiFi password")
 	bootCmd.Flags().StringArrayVar(&args.cmdlineArgs, "cmdline", defaultArgs, "Extra args to append to cmdline.txt")
@@ -98,16 +100,16 @@ func enableSSH(bootPath string) error {
 	return nil
 }
 
-func setup_wifi_connection(bootPath string, wifiSSID string, wifiPass string) error {
+func setup_wifi_connection(bootPath string, wifiSSID string, wifiPass string, country string) error {
 	fmt.Print("Setting up WiFi connection... ")
 
-	wpaSupplicant := fmt.Sprintf(`country=ES # Your 2-digit country code
+	wpaSupplicant := fmt.Sprintf(`country=%s # Your 2-digit country code
 ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
 network={
 	ssid="%s"
 	psk="%s"
 	key_mgmt=WPA-PSK
-}`, wifiSSID, wifiPass)
+}`, country, wifiSSID, wifiPass)
 
 	emptyFile, err := os.Create(filepath.Join(bootPath, "wpa_supplicant.conf"))
 	if err != nil {
@@ -155,7 +157,7 @@ func setupBoot(args BootArgs, bootPath string) error {
 	if len(args.wifiSSID) == 0 && len(args.wifiPass) == 0 {
 		println("Skipping setting up Wifi connection")
 	} else {
-		err = setup_wifi_connection(bootPath, args.wifiSSID, args.wifiPass)
+		err = setup_wifi_connection(args.country, bootPath, args.wifiSSID, args.wifiPass)
 		if err != nil {
 			return err
 		}
