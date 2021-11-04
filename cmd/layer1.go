@@ -38,20 +38,6 @@ type Layer1Args struct {
 	staticIP         net.IP
 }
 
-type Layer1Settings struct {
-	loginUser        string
-	loginPassword    string
-	deployerGroup    string
-	deployerUser     string
-	deployerPassword string
-	hostname         string
-	s3Bucket         string
-	s3File           string
-	s3Region         string
-	rootPassword     string
-	keysPath         string
-}
-
 func NewLayer1Cmd() *cobra.Command {
 	args := Layer1Args{}
 	var layer1Cmd = &cobra.Command{
@@ -75,7 +61,7 @@ func NewLayer1Cmd() *cobra.Command {
 		},
 		RunE: func(cmd *cobra.Command, posArgs []string) error {
 			fmt.Println("Provisioning layer 1...")
-			if err := layer1(args); err != nil {
+			if err := ProvisionLayer1(args); err != nil {
 				return err
 			}
 
@@ -110,7 +96,7 @@ func NewLayer1Cmd() *cobra.Command {
 	return layer1Cmd
 }
 
-func layer1(args Layer1Args) error {
+func ProvisionLayer1(args Layer1Args) error {
 	s3Region, s3Bucket, s3File, err := splitAwsPath(args.s3Path)
 	if err != nil {
 		return err
@@ -133,232 +119,297 @@ func layer1(args Layer1Args) error {
 	}
 	defer conn.close()
 
-	err = setupDeployer(conn, Layer1Settings{
-		loginUser:        args.loginUser,
-		loginPassword:    args.loginPassword,
-		deployerGroup:    args.deployerUser,
-		deployerUser:     args.deployerUser,
-		deployerPassword: args.deployerPassword,
-		hostname:         args.hostname,
-		s3Bucket:         s3Bucket,
-		s3File:           s3File,
-		s3Region:         s3Region,
-		keysPath:         args.keysPath,
-		rootPassword:     args.rootPassword,
-	})
-	if err != nil {
+	fmt.Println("Creating deployer group...")
+	if provisioned, err := createDeployerGroup(conn, args); err != nil {
 		return err
+	} else if provisioned {
+		fmt.Println("Deployer group created")
+	} else {
+		fmt.Println("Deployer group already created")
+	}
+
+	fmt.Println("Provisioning deployer sudo access...")
+	if provisioned, err := provisionSudoer(conn, args); err != nil {
+		return err
+	} else if provisioned {
+		fmt.Println("Deployer sudo access provisioned")
+	} else {
+		fmt.Println("Deployer sudo access already provisioned")
+	}
+
+	fmt.Println("Creating deployer user...")
+	if provisioned, err := createDeployerUser(conn, args); err != nil {
+		return err
+	} else if provisioned {
+		fmt.Println("Deployer user created")
+	} else {
+		fmt.Println("Deployer user already created")
+	}
+
+	if len(args.rootPassword) > 0 {
+		fmt.Println("Provisioning sudo password...")
+		if provisioned, err := setRootPassword(conn, args); err != nil {
+			return nil
+		} else if provisioned {
+			fmt.Println("Root password provisioned")
+		} else {
+			fmt.Println("Root password already provisioned")
+		}
+	}
+
+	fmt.Println("Provisioning SSH keys...")
+	if provisioned, err := uploadsshKeys(conn, UploadsshKeysArgs{
+		user:     args.deployerUser,
+		password: args.loginPassword,
+		group:    args.deployerUser,
+		s3Bucket: s3Bucket,
+		s3File:   s3File,
+		s3Region: s3Region,
+		keysPath: args.keysPath,
+	}); err != nil {
+		return err
+	} else if provisioned {
+		fmt.Println("SSH keys provisioned")
+	} else {
+		fmt.Println("SSH keys already provisioned")
+	}
+
+	fmt.Println("Configuring SSHD...")
+	if provisioned, err := setupsshdConfig(conn, args); err != nil {
+		return err
+	} else if provisioned {
+		fmt.Println("SSHD configured")
+	} else {
+		fmt.Println("SSHD already configured")
+	}
+
+	fmt.Println("Provisioning hostname...")
+	if provisioned, err := setHostname(conn, args); err != nil {
+		return err
+	} else if provisioned {
+		fmt.Println("Hostname provisioned")
+	} else {
+		fmt.Println("Hostname already provisioned")
+	}
+
+	fmt.Println("Disable loginUser login...")
+	if provisioned, err := disableLoginUser(conn, args); err != nil {
+		return err
+	} else if provisioned {
+		fmt.Println("LoginUser login disabled")
+	} else {
+		fmt.Println("LoginUser login already disabled")
 	}
 
 	if len(args.staticIP) != 0 {
-		fmt.Printf("Setting up static ip %s\n", args.staticIP)
-		setupNetworking(conn, interfaceArgs{
+		fmt.Printf("Provisioning static ip %s...\n", args.staticIP)
+		if provisioned, err := setupNetworking(conn, interfaceArgs{
 			ip:       args.staticIP,
 			password: args.loginPassword,
-		})
-	}
-
-	return nil
-}
-
-func setupDeployer(conn SSHConnection, settings Layer1Settings) error {
-	if err := createDeployerGroup(conn, settings); err != nil {
-		return err
-	}
-	if err := createDeployerUser(conn, settings); err != nil {
-		return err
-	}
-	if len(settings.rootPassword) > 0 {
-		if err := setRootPassword(conn, settings); err != nil {
-			return nil
+		}); err != nil {
+			return err
+		} else if provisioned {
+			fmt.Println("Static IP provisioned")
+		} else {
+			fmt.Println("Static IP already provisioned")
 		}
 	}
-	if err := uploadsshKeys(conn, UploadsshKeysArgs{
-		user:     settings.deployerUser,
-		password: settings.loginPassword,
-		group:    settings.deployerGroup,
-		s3Bucket: settings.s3Bucket,
-		s3File:   settings.s3File,
-		s3Region: settings.s3Region,
-		keysPath: settings.keysPath,
-	}); err != nil {
-		return err
-	}
-	if err := setupsshdConfig(conn, settings); err != nil {
-		return err
-	}
-	if err := setHostname(conn, settings); err != nil {
-		return err
-	}
-	if err := disableLoginUser(conn, settings); err != nil {
-		return err
-	}
+
 	return nil
 }
 
-func createDeployerGroup(conn SSHConnection, settings Layer1Settings) error {
-	grepCmd := fmt.Sprintf("grep -q %s /etc/group", settings.deployerGroup)
+func createDeployerGroup(conn SSHConnection, args Layer1Args) (bool, error) {
+	grepCmd := fmt.Sprintf("grep -q %s /etc/group", args.deployerUser)
 	_, _, err := conn.run(grepCmd)
 
 	if err == nil {
-		fmt.Println("Deployer group already exists")
-	} else {
-		groupaddCmd := fmt.Sprintf("groupadd %s", settings.deployerGroup)
-		stdout, stderr, err := conn.runSudoPassword(groupaddCmd, settings.loginPassword)
-		if err != nil {
-			return fmt.Errorf("error creating deployer group: %s [%s %s]", err, stdout, stderr)
-		}
-		fmt.Println("Deployer group created")
+		return false, nil
 	}
+	groupaddCmd := fmt.Sprintf("groupadd %s", args.deployerUser)
+	stdout, stderr, err := conn.runSudoPassword(groupaddCmd, args.loginPassword)
+	if err != nil {
+		return false, fmt.Errorf("error creating deployer group: %s [%s %s]", err, stdout, stderr)
+	}
+	return true, nil
+}
 
-	fmt.Println("Checking sudo access")
-	_, _, err = conn.runSudoPassword("whoami", settings.loginPassword)
+func provisionSudoer(conn SSHConnection, args Layer1Args) (bool, error) {
+	initialSudoers, _, err := conn.runSudoPassword("cat /etc/sudoers", args.loginPassword)
 	if err != nil {
-		return nil
-	}
-	fmt.Println("Updating sudoers file")
-	_, _, err = conn.runSudoPassword("cp /etc/sudoers /etc/sudoers.bkp", settings.loginPassword)
-	if err != nil {
-		return err
-	}
-
-	initialSudoers, _, err := conn.runSudoPassword("cat /etc/sudoers", settings.loginPassword)
-	if err != nil {
-		return err
+		return false, err
 	}
 	initialSudoers = strings.Trim(initialSudoers, "\n\r")
 
-	extraSudoer := fmt.Sprintf("%s ALL=(ALL) NOPASSWD: ALL", settings.deployerGroup)
+	extraSudoer := fmt.Sprintf("%s ALL=(ALL) NOPASSWD: ALL", args.deployerUser)
 	if strings.Contains(initialSudoers, extraSudoer) {
 		fmt.Println("Sudoer already setup")
-		return nil
+		return false, nil
+	}
+	_, _, err = conn.runSudoPassword("cp /etc/sudoers /etc/sudoers.bkp", args.loginPassword)
+	if err != nil {
+		return false, err
 	}
 
 	sudoersCmd := fmt.Sprintf("echo \"\n%s\n\" >> /etc/sudoers", extraSudoer)
-	_, _, err = conn.runSudoPassword(sudoersCmd, settings.loginPassword)
+	_, _, err = conn.runSudoPassword(sudoersCmd, args.loginPassword)
 	if err != nil {
-		return err
+		return false, err
 	}
-	// sudoers = sudoers.encode("utf8").replace(b"\r\n", b"\n")
-
-	return nil
+	return true, nil
 }
 
-func createDeployerUser(conn SSHConnection, settings Layer1Settings) error {
-	fmt.Println("Creating deployer user")
-	_, _, err := conn.run("id " + settings.deployerUser)
+func createDeployerUser(conn SSHConnection, args Layer1Args) (bool, error) {
+	_, _, err := conn.run("id " + args.deployerUser)
 	if err == nil {
-		fmt.Println("Deployer user already created")
-		return nil
+		return false, nil
 	}
 
-	useraddCmd := fmt.Sprintf("useradd -m -c 'deployer' -s /bin/bash -g '%s' ", settings.deployerGroup)
-	useraddCmd += settings.deployerUser
-	_, _, err = conn.runSudoPassword(useraddCmd, settings.loginPassword)
+	useraddCmd := fmt.Sprintf("useradd -m -c 'deployer' -s /bin/bash -g '%s' ", args.deployerUser)
+	useraddCmd += args.deployerUser
+	_, _, err = conn.runSudoPassword(useraddCmd, args.loginPassword)
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	chpasswdCmd := fmt.Sprintf("echo %s:%s | chpasswd", settings.deployerUser, settings.deployerPassword)
-	_, _, err = conn.runSudoPassword(chpasswdCmd, settings.loginPassword)
+	chpasswdCmd := fmt.Sprintf("echo %s:%s | chpasswd", args.deployerUser, args.deployerPassword)
+	_, _, err = conn.runSudoPassword(chpasswdCmd, args.loginPassword)
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	usermodCmd := fmt.Sprintf("usermod -a -G %s %s", settings.deployerGroup, settings.deployerUser)
-	_, _, err = conn.runSudoPassword(usermodCmd, settings.loginPassword)
+	usermodCmd := fmt.Sprintf("usermod -a -G %s %s", args.deployerUser, args.deployerUser)
+	_, _, err = conn.runSudoPassword(usermodCmd, args.loginPassword)
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	mkdirsshCmd := fmt.Sprintf("mkdir /home/%s/.ssh", settings.deployerUser)
-	_, _, err = conn.runSudoPassword(mkdirsshCmd, settings.loginPassword)
+	mkdirsshCmd := fmt.Sprintf("mkdir /home/%s/.ssh", args.deployerUser)
+	_, _, err = conn.runSudoPassword(mkdirsshCmd, args.loginPassword)
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	chownCmd := fmt.Sprintf("chown -R %s:%s /home/%s", settings.deployerUser, settings.deployerGroup, settings.deployerUser)
-	_, _, err = conn.runSudoPassword(chownCmd, settings.loginPassword)
+	chownCmd := fmt.Sprintf("chown -R %s:%s /home/%s", args.deployerUser, args.deployerUser, args.deployerUser)
+	_, _, err = conn.runSudoPassword(chownCmd, args.loginPassword)
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	return nil
+	return true, nil
 }
 
-func setRootPassword(conn SSHConnection, settings Layer1Settings) error {
+func setRootPassword(conn SSHConnection, args Layer1Args) (bool, error) {
 	fmt.Println("Setting root password")
-	chpasswdCmd := fmt.Sprintf("echo root:%s | chpasswd", settings.rootPassword)
-	_, _, err := conn.runSudoPassword(chpasswdCmd, settings.loginPassword)
+	chpasswdCmd := fmt.Sprintf("echo root:%s | chpasswd", args.rootPassword)
+	_, _, err := conn.runSudoPassword(chpasswdCmd, args.loginPassword)
 	if err != nil {
-		return err
+		return false, err
 	}
-	return nil
+	return true, nil
 }
 
-func setupsshdConfig(conn SSHConnection, settings Layer1Settings) error {
+func setupsshdConfig(conn SSHConnection, args Layer1Args) (bool, error) {
 	config := "/etc/ssh/sshd_config"
+	changes := []string{"UsePAM yes", "PermitRootLogin yes", "PasswordAuthentication yes"}
+
+	catCmd := fmt.Sprintf("cat %s", config)
+	data, _, err := conn.runSudoPassword(catCmd, args.loginPassword)
+	if err != nil {
+		return false, err
+	}
+
+	currentConfig := string(data)
+	needChanges := false
+	for _, change := range changes {
+		if strings.Contains(currentConfig, change) {
+			needChanges = true
+		}
+	}
+	if !needChanges {
+		return false, nil
+	}
 
 	backupCmd := fmt.Sprintf("cp %s %s.backup", config, config)
-	_, _, err := conn.runSudoPassword(backupCmd, settings.loginPassword)
+	_, _, err = conn.runSudoPassword(backupCmd, args.loginPassword)
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	usePamCmd := fmt.Sprintf("sed -i \"s/^UsePAM yes/UsePAM no/\" %s", config)
-	_, _, err = conn.runSudoPassword(usePamCmd, settings.loginPassword)
+	usePamCmd := fmt.Sprintf("sed -i \"s/^#?UsePAM yes/UsePAM no/\" %s", config)
+	_, _, err = conn.runSudoPassword(usePamCmd, args.loginPassword)
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	permitRootLoginCmd := fmt.Sprintf("sed -i \"s/^PermitRootLogin yes/PermitRootLogin no/\" %s", config)
-	_, _, err = conn.runSudoPassword(permitRootLoginCmd, settings.loginPassword)
+	permitRootLoginCmd := fmt.Sprintf("sed -i \"s/^#?PermitRootLogin yes/PermitRootLogin no/\" %s", config)
+	_, _, err = conn.runSudoPassword(permitRootLoginCmd, args.loginPassword)
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	passwordAuthCmd := fmt.Sprintf("sed -i \"s/^#PasswordAuthentication yes/PasswordAuthentication no/\" %s", config)
-	_, _, err = conn.runSudoPassword(passwordAuthCmd, settings.loginPassword)
+	passwordAuthCmd := fmt.Sprintf("sed -i \"s/^#?PasswordAuthentication yes/PasswordAuthentication no/\" %s", config)
+	_, _, err = conn.runSudoPassword(passwordAuthCmd, args.loginPassword)
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	_, _, err = conn.runSudoPassword("service ssh reload", settings.loginPassword)
+	_, _, err = conn.runSudoPassword("service ssh reload", args.loginPassword)
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	return nil
+	return true, nil
 }
 
-func setHostname(conn SSHConnection, settings Layer1Settings) error {
-	println("Setting hostname")
-	hostnameCmd := fmt.Sprintf("echo \"%s\" > /etc/hostname", settings.hostname)
-	_, _, err := conn.runSudoPassword(hostnameCmd, settings.loginPassword)
+func setHostname(conn SSHConnection, args Layer1Args) (bool, error) {
+	hostnameData, _, err := conn.runSudoPassword("cat /etc/hostname", args.hostname)
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	hostCmd := fmt.Sprintf("echo \"127.0.0.1\t\t%s\" >> /etc/hosts", settings.hostname)
-	_, _, err = conn.runSudoPassword(hostCmd, settings.loginPassword)
-	if err != nil {
-		return err
+	currentHostname := strings.Trim(string(hostnameData), "\n")
+	needChangeHostname := currentHostname != args.hostname
+
+	if needChangeHostname {
+		hostnameCmd := fmt.Sprintf("echo \"%s\" > /etc/hostname", args.hostname)
+		_, _, err = conn.runSudoPassword(hostnameCmd, args.loginPassword)
+		if err != nil {
+			return false, err
+		}
 	}
 
-	return nil
+	newHostsLine := fmt.Sprintf("127.0.0.1\t\t%s", args.hostname)
+
+	hostsContentData, _, err := conn.runSudoPassword("cat /etc/hosts", args.loginPassword)
+	if err != nil {
+		return false, err
+	}
+
+	hostsContent := string(hostsContentData)
+	needUpdateHosts := !strings.Contains(hostsContent, newHostsLine)
+
+	if needUpdateHosts {
+		hostCmd := fmt.Sprintf("echo \"127.0.0.1\t\t%s\" >> /etc/hosts", args.hostname)
+		_, _, err = conn.runSudoPassword(hostCmd, args.loginPassword)
+		if err != nil {
+			return false, err
+		}
+	}
+
+	return needChangeHostname || needUpdateHosts, nil
 }
 
-func disableLoginUser(conn SSHConnection, settings Layer1Settings) error {
-	passwdCmd := fmt.Sprintf("passwd -d %s", settings.loginUser)
-	_, _, err := conn.runSudoPassword(passwdCmd, settings.loginPassword)
+func disableLoginUser(conn SSHConnection, args Layer1Args) (bool, error) {
+	passwdCmd := fmt.Sprintf("passwd -d %s", args.loginUser)
+	_, _, err := conn.runSudoPassword(passwdCmd, args.loginPassword)
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	usermodCmd := fmt.Sprintf("usermod -s /usr/sbin/nologin %s", settings.loginUser)
-	_, _, err = conn.runSudoPassword(usermodCmd, settings.loginPassword)
+	usermodCmd := fmt.Sprintf("usermod -s /usr/sbin/nologin %s", args.loginUser)
+	_, _, err = conn.runSudoPassword(usermodCmd, args.loginPassword)
 	if err != nil {
-		return err
+		return false, err
 	}
-	return nil
+	return true, nil
 }

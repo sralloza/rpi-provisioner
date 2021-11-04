@@ -90,7 +90,8 @@ func updateAuthorizedKeys(args authorizedKeysArgs) error {
 	}
 	defer conn.close()
 
-	err = uploadsshKeys(conn, UploadsshKeysArgs{
+	fmt.Println("Provisioning SSH keys...")
+	if provisioned, err := uploadsshKeys(conn, UploadsshKeysArgs{
 		user:     args.user,
 		password: args.password,
 		group:    args.user,
@@ -98,9 +99,13 @@ func updateAuthorizedKeys(args authorizedKeysArgs) error {
 		s3File:   s3File,
 		s3Region: s3Region,
 		keysPath: args.keysPath,
-	})
-	if err != nil {
+	}); err != nil {
 		return err
+	} else if provisioned {
+		fmt.Println("SSH keys provisioned")
+	} else {
+		fmt.Println("SSH keys already provisioned")
 	}
+
 	return nil
 }

@@ -104,13 +104,11 @@ type UploadsshKeysArgs struct {
 	keysPath string
 }
 
-func uploadsshKeys(conn SSHConnection, args UploadsshKeysArgs) error {
-	fmt.Println("Updating SSH keys")
-
+func uploadsshKeys(conn SSHConnection, args UploadsshKeysArgs) (bool, error) {
 	mkdirCmd := fmt.Sprintf("mkdir -p /home/%s/.ssh", args.user)
 	_, _, err := conn.run(mkdirCmd)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	catCmd := fmt.Sprintf("cat /home/%s/.ssh/authorized_keys", args.user)
@@ -130,7 +128,7 @@ func uploadsshKeys(conn SSHConnection, args UploadsshKeysArgs) error {
 		newKeys, err = getAWSSavedKeys(args.s3Bucket, args.s3File, args.s3Region)
 	}
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	sort.Strings(authorizedKeys)
@@ -150,47 +148,45 @@ func uploadsshKeys(conn SSHConnection, args UploadsshKeysArgs) error {
 			}
 		}
 		if equal {
-			fmt.Println("SSH Keys update not needed, same keys detected")
-			return nil
+			return false, nil
 		}
 	}
 
 	updateKeysCmd := fmt.Sprintf("echo \"%s\" > /home/%s/.ssh/authorized_keys", newFileContent, args.user)
 	_, _, err = conn.runSudoPassword(updateKeysCmd, args.password)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	sshFolder := fmt.Sprintf("/home/%s/.ssh", args.user)
 	authorizedKeysPath := fmt.Sprintf("%s/authorized_keys", sshFolder)
 
-	fmt.Println("Fixing permissions of user's .ssh files")
 	chmodsshCmd := fmt.Sprintf("chmod 700 %s", sshFolder)
 	_, _, err = conn.runSudoPassword(chmodsshCmd, args.password)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	chmodAkpath := fmt.Sprintf("chmod 600 %s", authorizedKeysPath)
 	_, _, err = conn.runSudoPassword(chmodAkpath, args.password)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	ownership := fmt.Sprintf("%s:%s", args.user, args.group)
 	chownsshCmd := fmt.Sprintf("chown %s %s", ownership, sshFolder)
 	_, _, err = conn.runSudoPassword(chownsshCmd, args.password)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	chownAkpCmd := fmt.Sprintf("chown %s %s", ownership, authorizedKeysPath)
 	_, _, err = conn.runSudoPassword(chownAkpCmd, args.password)
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	return nil
+	return true, nil
 }
 
 func getKeysFromFile(filepath string) ([]string, error) {
@@ -214,7 +210,7 @@ func getAWSSavedKeys(bucket string, item string, region string) ([]string, error
 	sess, _ := session.NewSession(&aws.Config{Region: aws.String(region)})
 
 	downloader := s3manager.NewDownloader(sess)
-	numBytes, err := downloader.Download(file,
+	_, err = downloader.Download(file,
 		&s3.GetObjectInput{
 			Bucket: aws.String(bucket),
 			Key:    aws.String(item),
@@ -222,8 +218,6 @@ func getAWSSavedKeys(bucket string, item string, region string) ([]string, error
 	if err != nil {
 		return []string{}, err
 	}
-
-	fmt.Println("Downloaded", item, numBytes, "bytes")
 
 	data, err := ioutil.ReadFile("tmpfile")
 	if err != nil {

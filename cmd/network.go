@@ -83,13 +83,18 @@ func networkingEntrypoint(args NetworkingArgs) error {
 	}
 	defer conn.close()
 
-	err = setupNetworking(conn, interfaceArgs{
+	fmt.Printf("Provisioning static ip %s...\n", args.ip)
+	if provisioned, err := setupNetworking(conn, interfaceArgs{
 		ip:       args.ip,
 		password: args.password,
-	})
-	if err != nil {
+	}); err != nil {
 		return err
+	} else if provisioned {
+		fmt.Println("Provisioned static IP")
+	} else {
+		fmt.Println("Static IP already provisioned")
 	}
+
 	return nil
 }
 
@@ -98,32 +103,28 @@ type interfaceArgs struct {
 	password string
 }
 
-func setupNetworking(conn SSHConnection, args interfaceArgs) error {
+func setupNetworking(conn SSHConnection, args interfaceArgs) (bool, error) {
 	// the lowest metric has priority -> eth0
-	fmt.Println("Setting static ip for interface eth0")
 	eth0Provisioned, err := provisionStaticIPIface(conn, args, "eth0", 100)
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	fmt.Println("Setting static ip for interface wlan0")
 	wlan0Provisioned, err := provisionStaticIPIface(conn, args, "wlan0", 200)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	if !eth0Provisioned && !wlan0Provisioned {
-		fmt.Println("Skipping DHCP restart as no interface has been provisioned")
-		return nil
+		return false, nil
 	}
 
-	fmt.Println("Restarting DHCP")
 	err = rebootdhcpd(conn, args.password)
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	return nil
+	return true, nil
 }
 
 func provisionStaticIPIface(conn SSHConnection, args interfaceArgs, iface string, metric int) (bool, error) {
@@ -138,7 +139,6 @@ func provisionStaticIPIface(conn SSHConnection, args interfaceArgs, iface string
 
 	// TODO: override interface settings (detect start and end)
 	if strings.Contains(fmt.Sprintf("interface %s", iface), dhcpConfiguration) {
-		println("Interface already setup (may be wrongly set up, though)")
 		return false, nil
 	}
 
