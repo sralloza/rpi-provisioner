@@ -8,7 +8,13 @@ That's why this repo was created. The first version was created in Python, but t
 
 ## Problems & Solutions
 
-### SSH Keys
+### Initial setup
+
+What happens if you don't have an spare screen and keyboard? Don't worry, this script has your back. After flashing your raspbian image into your ssh card, execute the `boot` command. It will setup the ssh server and optionally a wifi connection to work the first time you turn your raspberry on. By default it will also add some lines to `cmdline.txt` to enable some features needed to run a k3s cluster. If you want to disable it, pass `--cmdline=""` to the `boot` command.
+
+Note: you must pass the path of your sd card (the `BOOT_PATH` argument). In windows it will likely be `E:/`, `F:/` or something similar.
+
+### SSH Keys management
 
 I have some PCs with ssh keys, so naturally I would want to be able to ssh into the Raspberry from any of my PCs.
 
@@ -31,6 +37,10 @@ Then you set your AWS env vars (`AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`)
 
 We have covered how to store your public ssh keys. How can you update the ssh keys in your raspberry's authorized_keys? Simple, just use the [authorized-keys](#authorized-keys) command (or the [layer1](#layer1) command if you set up the raspberry for the first time).
 
+### Networking
+
+You will probably ssh often into your rapsberry pi, you chances are you want to setup a static IP address. It's really simple to do it, just use the [network](#network) command.
+
 ## Commands
 
 ### boot
@@ -52,10 +62,6 @@ Flags:
 Global Flags:
       --debug   Enable debug                                                                                              21:33:29
 ```
-
-What happens if you don't have an spare screen and keyboard? Don't worry, this script has your back. After flashing your raspbian image into your ssh card, execute the `boot` command. It will setup the ssh server and optionally a wifi connection to work the first time you turn your raspberry on. By default it will also add some lines to `cmdline.txt` to enable some features needed to run a k3s cluster. If you want to disable it, pass `--cmdline=""` to the `boot` command.
-
-Note: you must pass the path of your sd card (the `BOOT_PATH` argument). In windows it will likely be `E:/`, `F:/` or something similar.
 
 ### authorized-keys
 
