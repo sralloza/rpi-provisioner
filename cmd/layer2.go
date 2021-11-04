@@ -35,12 +35,12 @@ func NewLayer2Cmd() *cobra.Command {
 	var layer2Cmd = &cobra.Command{
 		Use:   "layer2",
 		Short: "Provision layer 2",
-		Long: `Layer 2 uses the deployer user and bash. It consists of:
-		- Update and upgrade packages
-		- Install libraries: build-essential, cmake, cron, curl, git, libffi-dev, nano, python3-pip, python3, wget
-		- Install fish
-		- Install docker
-		`,
+		Long: `Layer 2 uses the deployer user and bash. It will perform the following tasks:
+- Update and upgrade packages
+- Install libraries: build-essential, cmake, cron, curl, git, libffi-dev, nano, python3-pip, python3, wget
+- Install fish
+- Install docker
+`,
 		RunE: func(cmd *cobra.Command, posArgs []string) error {
 			fmt.Println("Provisioning layer 2")
 			if err := ProvisionLayer2(args); err != nil {

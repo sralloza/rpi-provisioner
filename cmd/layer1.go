@@ -43,7 +43,7 @@ func NewLayer1Cmd() *cobra.Command {
 	var layer1Cmd = &cobra.Command{
 		Use:   "layer1",
 		Short: "Provision layer 1",
-		Long: `Layer 1 uses the default user and bash shell. It consists of:
+		Long: `Layer 1 uses the default user and bash shell. It will perform the following tasks:
  - Create deployer user
  - Set hostname
  - Setup ssh config and keys
