@@ -81,5 +81,3 @@ As said before, it will download the public ssh keys from AWS and update them. Y
 ### layer1
 
 ### layer2
-
-### layer3
