@@ -108,7 +108,7 @@ func uploadsshKeys(conn SSHConnection, args UploadsshKeysArgs) (bool, error) {
 	mkdirCmd := fmt.Sprintf("mkdir -p /home/%s/.ssh", args.user)
 	_, _, err := conn.run(mkdirCmd)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error creating user's ssh directory: %w", err)
 	}
 
 	catCmd := fmt.Sprintf("cat /home/%s/.ssh/authorized_keys", args.user)
@@ -128,7 +128,7 @@ func uploadsshKeys(conn SSHConnection, args UploadsshKeysArgs) (bool, error) {
 		newKeys, err = getAWSSavedKeys(args.s3Bucket, args.s3File, args.s3Region)
 	}
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error generating SSH auth: %w", err)
 	}
 
 	sort.Strings(authorizedKeys)
@@ -155,7 +155,7 @@ func uploadsshKeys(conn SSHConnection, args UploadsshKeysArgs) (bool, error) {
 	updateKeysCmd := fmt.Sprintf("echo \"%s\" > /home/%s/.ssh/authorized_keys", newFileContent, args.user)
 	_, _, err = conn.runSudoPassword(updateKeysCmd, args.password)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error updating authorized_keys: %w", err)
 	}
 
 	sshFolder := fmt.Sprintf("/home/%s/.ssh", args.user)
@@ -164,26 +164,26 @@ func uploadsshKeys(conn SSHConnection, args UploadsshKeysArgs) (bool, error) {
 	chmodsshCmd := fmt.Sprintf("chmod 700 %s", sshFolder)
 	_, _, err = conn.runSudoPassword(chmodsshCmd, args.password)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error setting permissions to ssh folder: %w", err)
 	}
 
 	chmodAkpath := fmt.Sprintf("chmod 600 %s", authorizedKeysPath)
 	_, _, err = conn.runSudoPassword(chmodAkpath, args.password)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error setting permissions to authorized_keys: %w", err)
 	}
 
 	ownership := fmt.Sprintf("%s:%s", args.user, args.group)
 	chownsshCmd := fmt.Sprintf("chown %s %s", ownership, sshFolder)
 	_, _, err = conn.runSudoPassword(chownsshCmd, args.password)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error setting ownership of ssh folder: %w", err)
 	}
 
 	chownAkpCmd := fmt.Sprintf("chown %s %s", ownership, authorizedKeysPath)
 	_, _, err = conn.runSudoPassword(chownAkpCmd, args.password)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error setting ownership of authorized_keys: %w", err)
 	}
 
 	return true, nil

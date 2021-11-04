@@ -107,12 +107,12 @@ func setupNetworking(conn SSHConnection, args interfaceArgs) (bool, error) {
 	// the lowest metric has priority -> eth0
 	eth0Provisioned, err := provisionStaticIPIface(conn, args, "eth0", 100)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error provisioning static IP for eth0: %w", err)
 	}
 
 	wlan0Provisioned, err := provisionStaticIPIface(conn, args, "wlan0", 200)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error provisioning static IP for wlan0", err)
 	}
 
 	if !eth0Provisioned && !wlan0Provisioned {
@@ -121,7 +121,7 @@ func setupNetworking(conn SSHConnection, args interfaceArgs) (bool, error) {
 
 	err = rebootdhcpd(conn, args.password)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error rebooting DHCP service: %w", err)
 	}
 
 	return true, nil
@@ -130,11 +130,11 @@ func setupNetworking(conn SSHConnection, args interfaceArgs) (bool, error) {
 func provisionStaticIPIface(conn SSHConnection, args interfaceArgs, iface string, metric int) (bool, error) {
 	routerIP, err := getRouterIP(conn)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error getting router IP: %w", err)
 	}
 	dhcpConfiguration := generateStaticDHCPConfiguration(iface, args.ip, routerIP, metric)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error generating static DHCP conf for %q: %w", iface, err)
 	}
 
 	// TODO: override interface settings (detect start and end)
@@ -145,7 +145,7 @@ func provisionStaticIPIface(conn SSHConnection, args interfaceArgs, iface string
 	catCmd := fmt.Sprintf("echo \"%s\" >> /etc/dhcpcd.conf", dhcpConfiguration)
 	_, _, err = conn.runSudoPassword(catCmd, args.password)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error updating DHCP configuration: %w", err)
 	}
 	return true, nil
 }
