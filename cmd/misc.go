@@ -8,6 +8,9 @@ import (
 )
 
 func splitAwsPath(awsPath string) (string, string, string, error) {
+	if len(awsPath) == 0 {
+		return "", "", "", nil
+	}
 	chunks := strings.Split(awsPath, "/")
 	if len(chunks) != 3 {
 		AwsErrorMsg := "awsPath must match pattern region/bucket/file (%#v)"

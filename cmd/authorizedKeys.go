@@ -29,6 +29,7 @@ type authorizedKeysArgs struct {
 	host      string
 	port      int
 	s3Path    string
+	keysPath  string
 }
 
 func NewAuthorizedKeysCmd() *cobra.Command {
@@ -37,6 +38,20 @@ func NewAuthorizedKeysCmd() *cobra.Command {
 		Use:   "authorized-keys",
 		Short: "Update authorized keys",
 		Long:  `Download keys from the S3 bucket and update them.`,
+		PreRunE: func(cmd *cobra.Command, posArgs []string) error {
+			if !args.useSSHKey && len(args.password) == 0 {
+				return errors.New("must pass --ssh-key or --password")
+			}
+
+			if len(args.keysPath) != 0 && len(args.s3Path) != 0 {
+				return errors.New("must pass one of --keys-path or --s3-path")
+			}
+			if len(args.keysPath) == 0 && len(args.s3Path) == 0 {
+				return errors.New("must pass one of --keys-path or --s3-path")
+			}
+
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, posArgs []string) error {
 			return updateAuthorizedKeys(args)
 		},
@@ -48,17 +63,15 @@ func NewAuthorizedKeysCmd() *cobra.Command {
 	authorizedKeysCmd.Flags().StringVar(&args.host, "host", "", "Server host")
 	authorizedKeysCmd.Flags().IntVar(&args.port, "port", 22, "Server SSH port")
 	authorizedKeysCmd.Flags().StringVar(&args.s3Path, "s3-path", "", "Amazon S3 path. Must match the pattern region/bucket/file")
+	authorizedKeysCmd.Flags().StringVar(&args.keysPath, "keys-path", "", "Local keys file path. You can select the public key file or a file containing multiple public keys.")
 
-	authorizedKeysCmd.MarkFlagRequired("s3-path")
+	authorizedKeysCmd.MarkFlagRequired("user")
+	authorizedKeysCmd.MarkFlagRequired("host")
 
 	return authorizedKeysCmd
 }
 
 func updateAuthorizedKeys(args authorizedKeysArgs) error {
-	if !args.useSSHKey && len(args.password) == 0 {
-		return errors.New("must pass --ssh-key or --password")
-	}
-
 	s3Region, s3Bucket, s3File, err := splitAwsPath(args.s3Path)
 	if err != nil {
 		return err
@@ -84,6 +97,7 @@ func updateAuthorizedKeys(args authorizedKeysArgs) error {
 		s3Bucket: s3Bucket,
 		s3File:   s3File,
 		s3Region: s3Region,
+		keysPath: args.keysPath,
 	})
 	if err != nil {
 		return err

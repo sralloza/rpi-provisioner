@@ -16,6 +16,7 @@ limitations under the License.
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -33,6 +34,7 @@ type Layer1Args struct {
 	hostname         string
 	port             int
 	s3Path           string
+	keysPath         string
 	staticIP         net.IP
 }
 
@@ -47,6 +49,7 @@ type Layer1Settings struct {
 	s3File           string
 	s3Region         string
 	rootPassword     string
+	keysPath         string
 }
 
 func NewLayer1Cmd() *cobra.Command {
@@ -61,6 +64,15 @@ func NewLayer1Cmd() *cobra.Command {
  - Disable pi login
  - [optional] static ip configuration
  `,
+		PreRunE: func(cmd *cobra.Command, posArgs []string) error {
+			if len(args.keysPath) != 0 && len(args.s3Path) != 0 {
+				return errors.New("must pass one of --keys-path or --s3-path")
+			}
+			if len(args.keysPath) == 0 && len(args.s3Path) == 0 {
+				return errors.New("must pass one of --keys-path or --s3-path")
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, posArgs []string) error {
 			fmt.Println("Provisioning layer 1...")
 			if err := layer1(args); err != nil {
@@ -86,6 +98,7 @@ func NewLayer1Cmd() *cobra.Command {
 	layer1Cmd.Flags().StringVar(&args.hostname, "hostname", "", "Server hostname")
 	layer1Cmd.Flags().IntVar(&args.port, "port", 22, "Server SSH port")
 	layer1Cmd.Flags().StringVar(&args.s3Path, "s3-path", "", "Amazon S3 path. Must match the pattern region/bucket/file")
+	layer1Cmd.Flags().StringVar(&args.keysPath, "keys-path", "", "Local keys file path. You can select the public key file or a file containing multiple public keys.")
 	layer1Cmd.Flags().IPVar(&args.staticIP, "static-ip", nil, "Set up the static ip for eth0 and wlan0")
 
 	layer1Cmd.MarkFlagRequired("login-user")
@@ -94,7 +107,6 @@ func NewLayer1Cmd() *cobra.Command {
 	layer1Cmd.MarkFlagRequired("deployer-password")
 	layer1Cmd.MarkFlagRequired("host")
 	layer1Cmd.MarkFlagRequired("host-name")
-	layer1Cmd.MarkFlagRequired("s3-path")
 	return layer1Cmd
 }
 
@@ -131,6 +143,7 @@ func layer1(args Layer1Args) error {
 		s3Bucket:         s3Bucket,
 		s3File:           s3File,
 		s3Region:         s3Region,
+		keysPath:         args.keysPath,
 		rootPassword:     args.rootPassword,
 	})
 	if err != nil {
@@ -167,6 +180,7 @@ func setupDeployer(conn SSHConnection, settings Layer1Settings) error {
 		s3Bucket: settings.s3Bucket,
 		s3File:   settings.s3File,
 		s3Region: settings.s3Region,
+		keysPath: settings.keysPath,
 	}); err != nil {
 		return err
 	}

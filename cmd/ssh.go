@@ -101,6 +101,7 @@ type UploadsshKeysArgs struct {
 	s3Bucket string
 	s3File   string
 	s3Region string
+	keysPath string
 }
 
 func uploadsshKeys(conn SSHConnection, args UploadsshKeysArgs) error {
@@ -114,6 +115,7 @@ func uploadsshKeys(conn SSHConnection, args UploadsshKeysArgs) error {
 
 	catCmd := fmt.Sprintf("cat /home/%s/.ssh/authorized_keys", args.user)
 	fileContent, _, err := conn.run(catCmd)
+
 	var authorizedKeys []string
 	if err != nil {
 		authorizedKeys = []string{}
@@ -121,10 +123,16 @@ func uploadsshKeys(conn SSHConnection, args UploadsshKeysArgs) error {
 		authorizedKeys = strings.Split(strings.Trim(fileContent, "\n"), "\n")
 	}
 
-	newKeys, err := getSavedKeys(args.s3Bucket, args.s3File, args.s3Region)
+	var newKeys []string
+	if len(args.keysPath) != 0 {
+		newKeys, err = getKeysFromFile(args.keysPath)
+	} else {
+		newKeys, err = getAWSSavedKeys(args.s3Bucket, args.s3File, args.s3Region)
+	}
 	if err != nil {
 		return err
 	}
+
 	sort.Strings(authorizedKeys)
 
 	finalKeys := append(authorizedKeys, newKeys...)
@@ -185,7 +193,17 @@ func uploadsshKeys(conn SSHConnection, args UploadsshKeysArgs) error {
 	return nil
 }
 
-func getSavedKeys(bucket string, item string, region string) ([]string, error) {
+func getKeysFromFile(filepath string) ([]string, error) {
+	data, err := os.ReadFile(filepath)
+	if err != nil {
+		return []string{}, err
+	}
+
+	keys := strings.Split(strings.Trim(string(data), "\n"), "\n")
+	return keys, nil
+}
+
+func getAWSSavedKeys(bucket string, item string, region string) ([]string, error) {
 	file, err := os.Create("tmpfile")
 	if err != nil {
 		return []string{}, err
