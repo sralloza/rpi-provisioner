@@ -88,6 +88,15 @@ func ProvisionLayer2(args Layer2Args) error {
 		fmt.Println("fish already provisioned")
 	}
 
+	fmt.Println("Provisioning oh-my-fish...")
+	if installed, err := InstallOhMyFish(conn, args); err != nil {
+		return err
+	} else if installed {
+		fmt.Println("oh-my-fish provisioned successfully")
+	} else {
+		fmt.Println("oh-my-fish already provisioned")
+	}
+
 	fmt.Println("Provisioning docker...")
 	if installed, err := InstallDocker(conn, args); err != nil {
 		return err
@@ -112,12 +121,12 @@ func ProvisionLayer2(args Layer2Args) error {
 func InstallLibraries(conn SSHConnection) error {
 	_, _, err := conn.runSudo("apt-get update")
 	if err != nil {
-		return err
+		return fmt.Errorf("error updating apt registry: %w", err)
 	}
 
 	_, _, err = conn.runSudo("apt-get upgrade -y")
 	if err != nil {
-		return err
+		return fmt.Errorf("error upgrading libraries: %w", err)
 	}
 
 	libraries := []string{
@@ -135,7 +144,7 @@ func InstallLibraries(conn SSHConnection) error {
 	installCmd := fmt.Sprintf("apt-get install %s -y", strings.Join(libraries, " "))
 	_, _, err = conn.runSudo(installCmd)
 	if err != nil {
-		return err
+		return fmt.Errorf("error installing needed libraries: %w", err)
 	}
 
 	return nil
@@ -144,74 +153,80 @@ func InstallLibraries(conn SSHConnection) error {
 func InstallFish(conn SSHConnection, args Layer2Args) (bool, error) {
 	_, _, err := conn.run("which fish")
 	if err == nil {
-		fmt.Println("fish already installed")
 		return false, nil
 	}
 
 	// This line is critical. It doesn't work with conn.runSudo(xxxx | tee xxx)
 	_, _, err = conn.run("echo 'deb http://download.opensuse.org/repositories/shells:/fish:/release:/3/Debian_10/ /' | sudo tee /etc/apt/sources.list.d/shells:fish:release:3.list")
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error adding fish apt registry: %w", err)
 	}
 
 	_, _, err = conn.runSudo("curl -fsSL https://download.opensuse.org/repositories/shells:fish:release:3/Debian_10/Release.key | gpg --dearmor | tee /etc/apt/trusted.gpg.d/shells_fish_release_3.gpg")
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error downloading fish apt keys (1): %w", err)
 	}
 
 	_, _, err = conn.runSudo("wget -nv https://download.opensuse.org/repositories/shells:fish:release:3/Debian_10/Release.key -O '/etc/apt/trusted.gpg.d/shells_fish_release_3.asc'")
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error downloading fish apt keys (2): %w", err)
 	}
 
 	_, _, err = conn.runSudo("apt update")
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error updating apt registry after adding fish registry: %w", err)
 	}
 
 	_, _, err = conn.runSudo("apt install fish -y")
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error installing fish: %w", err)
 	}
 
 	chshCmd := fmt.Sprintf("chsh -s /usr/bin/fish %s", args.user)
 	_, _, err = conn.runSudo(chshCmd)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error setting deployer's shell to fish: %w", err)
 	}
 
 	// Just for debug
 	conn.run("fish --version")
+	return true, nil
+}
 
-	// # Oh My Fish
+func InstallOhMyFish(conn SSHConnection, args Layer2Args) (bool, error) {
+	_, _, err := conn.run("which omf")
+	if err == nil {
+		return false, nil
+	}
+
 	_, _, err = conn.run("curl -L https://get.oh-my.fish > /tmp/omf.sh")
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error downloading oh-my-fish installer: %w", err)
 	}
 
 	_, _, err = conn.run("fish /tmp/omf.sh --noninteractive")
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error running oh-my-fish installer: %w", err)
 	}
 
 	_, _, err = conn.run("rm /tmp/omf.sh")
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error removing oh-my-fish installer: %w", err)
 	}
 
 	_, _, err = conn.run("echo omf install agnoster | fish")
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error installing agnorester theme: %w", err)
 	}
 
 	_, _, err = conn.run("echo omf theme agnoster | fish")
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error setting angoster theme: %w", err)
 	}
 
 	_, _, err = conn.run("echo omf install bang-bang | fish")
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error installing bang-bang plugin: %w", err)
 	}
 
 	return true, nil
@@ -220,27 +235,26 @@ func InstallFish(conn SSHConnection, args Layer2Args) (bool, error) {
 func InstallDocker(conn SSHConnection, args Layer2Args) (bool, error) {
 	_, _, err := conn.run("which docker")
 	if err == nil {
-		fmt.Println("Docker already installed")
 		return false, nil
 	}
 	_, _, err = conn.run("curl -fsSL https://get.docker.com -o /tmp/get-docker.sh")
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error downloading docker installer: %w", err)
 	}
 
 	_, _, err = conn.run("sudo sh /tmp/get-docker.sh")
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error executing docker installer: %w", err)
 	}
 
 	_, _, err = conn.run("rm /tmp/get-docker.sh")
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error removing docker installer: %w", err)
 	}
 
 	_, _, err = conn.run(fmt.Sprintf("sudo usermod -aG docker %s", args.user))
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error adding deployer to docker group: %w", err)
 	}
 
 	return true, nil
@@ -254,27 +268,27 @@ func InstallDockerCompose(conn SSHConnection, args Layer2Args) (bool, error) {
 
 	_, _, err = conn.run("mkdir -p ~/.local/bin")
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error creating folder ~/.local/bin: %w", err)
 	}
 
 	localBinPath := fmt.Sprintf("/home/%s/.local/bin", args.user)
 
 	paths, _, err := conn.run("bash -c \"echo $PATH\"")
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error getting current path")
 	}
 	pathList := strings.Split(strings.Trim(paths, "\n"), ":")
 
 	if !funk.Contains(pathList, localBinPath) {
 		_, _, err = conn.run(fmt.Sprintf("echo fish_add_path %s | fish", localBinPath))
 		if err != nil {
-			return false, err
+			return false, fmt.Errorf("error adding folder %q to path: %w", localBinPath, err)
 		}
 	}
 
 	_, _, err = conn.run("python3 -m pip install docker-compose")
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error installing docker-compose: %w", err)
 	}
 
 	return true, nil

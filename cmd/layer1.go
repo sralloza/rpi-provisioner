@@ -112,10 +112,10 @@ func ProvisionLayer1(args Layer1Args) error {
 	err = conn.Connect(args.loginUser, address)
 	if err != nil {
 		if strings.Contains(err.Error(), "no supported methods remain") {
-			println("SSH Connection error, layer 1 should be provisioned")
+			fmt.Println("SSH Connection error, layer 1 should be provisioned")
 			return nil
 		}
-		return err
+		return fmt.Errorf("SSH connection error: %w", err)
 	}
 	defer conn.close()
 
@@ -236,24 +236,23 @@ func createDeployerGroup(conn SSHConnection, args Layer1Args) (bool, error) {
 func provisionSudoer(conn SSHConnection, args Layer1Args) (bool, error) {
 	initialSudoers, _, err := conn.runSudoPassword("cat /etc/sudoers", args.loginPassword)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error getting sudoers info: %w", err)
 	}
 	initialSudoers = strings.Trim(initialSudoers, "\n\r")
 
 	extraSudoer := fmt.Sprintf("%s ALL=(ALL) NOPASSWD: ALL", args.deployerUser)
 	if strings.Contains(initialSudoers, extraSudoer) {
-		fmt.Println("Sudoer already setup")
 		return false, nil
 	}
 	_, _, err = conn.runSudoPassword("cp /etc/sudoers /etc/sudoers.bkp", args.loginPassword)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error creating sudoers backup: %w", err)
 	}
 
 	sudoersCmd := fmt.Sprintf("echo \"\n%s\n\" >> /etc/sudoers", extraSudoer)
 	_, _, err = conn.runSudoPassword(sudoersCmd, args.loginPassword)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error updating sudoers: %w", err)
 	}
 	return true, nil
 }
@@ -268,42 +267,41 @@ func createDeployerUser(conn SSHConnection, args Layer1Args) (bool, error) {
 	useraddCmd += args.deployerUser
 	_, _, err = conn.runSudoPassword(useraddCmd, args.loginPassword)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error executing useradd: %w", err)
 	}
 
 	chpasswdCmd := fmt.Sprintf("echo %s:%s | chpasswd", args.deployerUser, args.deployerPassword)
 	_, _, err = conn.runSudoPassword(chpasswdCmd, args.loginPassword)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error setting deployer password: %w", err)
 	}
 
 	usermodCmd := fmt.Sprintf("usermod -a -G %s %s", args.deployerUser, args.deployerUser)
 	_, _, err = conn.runSudoPassword(usermodCmd, args.loginPassword)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error setting deployer group: %w", err)
 	}
 
 	mkdirsshCmd := fmt.Sprintf("mkdir /home/%s/.ssh", args.deployerUser)
 	_, _, err = conn.runSudoPassword(mkdirsshCmd, args.loginPassword)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error setting deployer ssh folder: %w", err)
 	}
 
 	chownCmd := fmt.Sprintf("chown -R %s:%s /home/%s", args.deployerUser, args.deployerUser, args.deployerUser)
 	_, _, err = conn.runSudoPassword(chownCmd, args.loginPassword)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error changing deployer's home dir: %w", err)
 	}
 
 	return true, nil
 }
 
 func setRootPassword(conn SSHConnection, args Layer1Args) (bool, error) {
-	fmt.Println("Setting root password")
 	chpasswdCmd := fmt.Sprintf("echo root:%s | chpasswd", args.rootPassword)
 	_, _, err := conn.runSudoPassword(chpasswdCmd, args.loginPassword)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error setting root password: %w", err)
 	}
 	return true, nil
 }
@@ -315,7 +313,7 @@ func setupsshdConfig(conn SSHConnection, args Layer1Args) (bool, error) {
 	catCmd := fmt.Sprintf("cat %s", config)
 	data, _, err := conn.runSudoPassword(catCmd, args.loginPassword)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error getting current sshd config: %w", err)
 	}
 
 	currentConfig := string(data)
@@ -332,39 +330,39 @@ func setupsshdConfig(conn SSHConnection, args Layer1Args) (bool, error) {
 	backupCmd := fmt.Sprintf("cp %s %s.backup", config, config)
 	_, _, err = conn.runSudoPassword(backupCmd, args.loginPassword)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error creating backup of sshd config: %w", err)
 	}
 
 	usePamCmd := fmt.Sprintf("sed -i \"s/^#?UsePAM yes/UsePAM no/\" %s", config)
 	_, _, err = conn.runSudoPassword(usePamCmd, args.loginPassword)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error resticting sshd PAM use: %w", err)
 	}
 
 	permitRootLoginCmd := fmt.Sprintf("sed -i \"s/^#?PermitRootLogin yes/PermitRootLogin no/\" %s", config)
 	_, _, err = conn.runSudoPassword(permitRootLoginCmd, args.loginPassword)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error disabling ssh root login: %w", err)
 	}
 
 	passwordAuthCmd := fmt.Sprintf("sed -i \"s/^#?PasswordAuthentication yes/PasswordAuthentication no/\" %s", config)
 	_, _, err = conn.runSudoPassword(passwordAuthCmd, args.loginPassword)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error disabling ssh password auth: %w", err)
 	}
 
 	_, _, err = conn.runSudoPassword("service ssh reload", args.loginPassword)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error reloading ssh service: %w", err)
 	}
 
 	return true, nil
 }
 
 func setHostname(conn SSHConnection, args Layer1Args) (bool, error) {
-	hostnameData, _, err := conn.runSudoPassword("cat /etc/hostname", args.hostname)
+	hostnameData, _, err := conn.runSudoPassword("cat /etc/hostname", args.loginPassword)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error getting current hostname: %w", err)
 	}
 
 	currentHostname := strings.Trim(string(hostnameData), "\n")
@@ -374,7 +372,7 @@ func setHostname(conn SSHConnection, args Layer1Args) (bool, error) {
 		hostnameCmd := fmt.Sprintf("echo \"%s\" > /etc/hostname", args.hostname)
 		_, _, err = conn.runSudoPassword(hostnameCmd, args.loginPassword)
 		if err != nil {
-			return false, err
+			return false, fmt.Errorf("error changing hostname: %w", err)
 		}
 	}
 
@@ -382,7 +380,7 @@ func setHostname(conn SSHConnection, args Layer1Args) (bool, error) {
 
 	hostsContentData, _, err := conn.runSudoPassword("cat /etc/hosts", args.loginPassword)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error getting saved hosts: %w", err)
 	}
 
 	hostsContent := string(hostsContentData)
@@ -392,7 +390,7 @@ func setHostname(conn SSHConnection, args Layer1Args) (bool, error) {
 		hostCmd := fmt.Sprintf("echo \"127.0.0.1\t\t%s\" >> /etc/hosts", args.hostname)
 		_, _, err = conn.runSudoPassword(hostCmd, args.loginPassword)
 		if err != nil {
-			return false, err
+			return false, fmt.Errorf("error updating hosts: %w", err)
 		}
 	}
 
@@ -403,13 +401,13 @@ func disableLoginUser(conn SSHConnection, args Layer1Args) (bool, error) {
 	passwdCmd := fmt.Sprintf("passwd -d %s", args.loginUser)
 	_, _, err := conn.runSudoPassword(passwdCmd, args.loginPassword)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error removing login user's password: %w", err)
 	}
 
 	usermodCmd := fmt.Sprintf("usermod -s /usr/sbin/nologin %s", args.loginUser)
 	_, _, err = conn.runSudoPassword(usermodCmd, args.loginPassword)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error removing login user's shell: %w", err)
 	}
 	return true, nil
 }
