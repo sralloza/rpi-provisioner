@@ -20,6 +20,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"github.com/sralloza/rpi-provision/ssh"
 )
 
 type authorizedKeysArgs struct {
@@ -79,26 +80,26 @@ func updateAuthorizedKeys(args authorizedKeysArgs) error {
 
 	address := fmt.Sprintf("%s:%d", args.host, args.port)
 
-	conn := SSHConnection{
-		password:  args.password,
-		useSSHKey: args.useSSHKey,
+	conn := ssh.SSHConnection{
+		Password:  args.password,
+		UseSSHKey: args.useSSHKey,
 	}
 
 	err = conn.Connect(args.user, address)
 	if err != nil {
 		return err
 	}
-	defer conn.close()
+	defer conn.Close()
 
 	fmt.Println("Provisioning SSH keys...")
-	if provisioned, err := uploadsshKeys(conn, UploadsshKeysArgs{
-		user:     args.user,
-		password: args.password,
-		group:    args.user,
-		s3Bucket: s3Bucket,
-		s3File:   s3File,
-		s3Region: s3Region,
-		keysPath: args.keysPath,
+	if provisioned, err := ssh.UploadsshKeys(conn, ssh.UploadsshKeysArgs{
+		User:     args.user,
+		Password: args.password,
+		Group:    args.user,
+		S3Bucket: s3Bucket,
+		S3File:   s3File,
+		S3Region: s3Region,
+		KeysPath: args.keysPath,
 	}); err != nil {
 		return err
 	} else if provisioned {

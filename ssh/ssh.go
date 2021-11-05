@@ -1,4 +1,4 @@
-package cmd
+package ssh
 
 import (
 	"encoding/json"
@@ -13,23 +13,25 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/mitchellh/go-homedir"
 	"golang.org/x/crypto/ssh"
 )
 
 type SSHConnection struct {
 	config    *ssh.ClientConfig
 	conn      *ssh.Client
-	password  string
-	useSSHKey bool
+	Password  string
+	UseSSHKey bool
+	Debug     bool
 }
 
 func (c *SSHConnection) Connect(user string, address string) error {
 	var auth []ssh.AuthMethod
 
-	if c.useSSHKey {
+	if c.UseSSHKey {
 		auth = append(auth, publicKey("~/.ssh/id_rsa"))
 	} else {
-		auth = append(auth, ssh.Password(c.password))
+		auth = append(auth, ssh.Password(c.Password))
 	}
 
 	c.config = &ssh.ClientConfig{
@@ -45,19 +47,19 @@ func (c *SSHConnection) Connect(user string, address string) error {
 	return nil
 }
 
-func (c SSHConnection) run(cmd string) (string, string, error) {
-	return runCommand(cmd, c.conn)
+func (c SSHConnection) Run(cmd string) (string, string, error) {
+	return runCommand(cmd, c.conn, c.Debug)
 }
 
-func (c SSHConnection) runSudo(cmd string) (string, string, error) {
-	return c.run(basicSudoStdin(cmd, ""))
+func (c SSHConnection) RunSudo(cmd string) (string, string, error) {
+	return c.Run(basicSudoStdin(cmd, ""))
 }
 
-func (c SSHConnection) runSudoPassword(cmd string, password string) (string, string, error) {
-	return c.run(basicSudoStdin(cmd, password))
+func (c SSHConnection) RunSudoPassword(cmd string, password string) (string, string, error) {
+	return c.Run(basicSudoStdin(cmd, password))
 }
 
-func (c SSHConnection) close() {
+func (c SSHConnection) Close() {
 	c.conn.Close()
 }
 
@@ -65,8 +67,7 @@ func basicSudoStdin(cmd string, password string) string {
 	return fmt.Sprintf("echo %s | sudo -S bash -c '%s'", password, cmd)
 }
 
-func runCommand(cmd string, conn *ssh.Client) (string, string, error) {
-	debug, _ := rootCmd.Flags().GetBool("debug")
+func runCommand(cmd string, conn *ssh.Client, debug bool) (string, string, error) {
 	sess, err := conn.NewSession()
 	if err != nil {
 		panic(err)
@@ -95,24 +96,24 @@ func runCommand(cmd string, conn *ssh.Client) (string, string, error) {
 }
 
 type UploadsshKeysArgs struct {
-	user     string
-	password string
-	group    string
-	s3Bucket string
-	s3File   string
-	s3Region string
-	keysPath string
+	User     string
+	Password string
+	Group    string
+	S3Bucket string
+	S3File   string
+	S3Region string
+	KeysPath string
 }
 
-func uploadsshKeys(conn SSHConnection, args UploadsshKeysArgs) (bool, error) {
-	mkdirCmd := fmt.Sprintf("mkdir -p /home/%s/.ssh", args.user)
-	_, _, err := conn.run(mkdirCmd)
+func UploadsshKeys(conn SSHConnection, args UploadsshKeysArgs) (bool, error) {
+	mkdirCmd := fmt.Sprintf("mkdir -p /home/%s/.ssh", args.User)
+	_, _, err := conn.Run(mkdirCmd)
 	if err != nil {
 		return false, fmt.Errorf("error creating user's ssh directory: %w", err)
 	}
 
-	catCmd := fmt.Sprintf("cat /home/%s/.ssh/authorized_keys", args.user)
-	fileContent, _, err := conn.run(catCmd)
+	catCmd := fmt.Sprintf("cat /home/%s/.ssh/authorized_keys", args.User)
+	fileContent, _, err := conn.Run(catCmd)
 
 	var authorizedKeys []string
 	if err != nil {
@@ -122,10 +123,10 @@ func uploadsshKeys(conn SSHConnection, args UploadsshKeysArgs) (bool, error) {
 	}
 
 	var newKeys []string
-	if len(args.keysPath) != 0 {
-		newKeys, err = getKeysFromFile(args.keysPath)
+	if len(args.KeysPath) != 0 {
+		newKeys, err = getKeysFromFile(args.KeysPath)
 	} else {
-		newKeys, err = getAWSSavedKeys(args.s3Bucket, args.s3File, args.s3Region)
+		newKeys, err = getAWSSavedKeys(args.S3Bucket, args.S3File, args.S3Region)
 	}
 	if err != nil {
 		return false, fmt.Errorf("error generating SSH auth: %w", err)
@@ -152,36 +153,36 @@ func uploadsshKeys(conn SSHConnection, args UploadsshKeysArgs) (bool, error) {
 		}
 	}
 
-	updateKeysCmd := fmt.Sprintf("echo \"%s\" > /home/%s/.ssh/authorized_keys", newFileContent, args.user)
-	_, _, err = conn.runSudoPassword(updateKeysCmd, args.password)
+	updateKeysCmd := fmt.Sprintf("echo \"%s\" > /home/%s/.ssh/authorized_keys", newFileContent, args.User)
+	_, _, err = conn.RunSudoPassword(updateKeysCmd, args.Password)
 	if err != nil {
 		return false, fmt.Errorf("error updating authorized_keys: %w", err)
 	}
 
-	sshFolder := fmt.Sprintf("/home/%s/.ssh", args.user)
+	sshFolder := fmt.Sprintf("/home/%s/.ssh", args.User)
 	authorizedKeysPath := fmt.Sprintf("%s/authorized_keys", sshFolder)
 
 	chmodsshCmd := fmt.Sprintf("chmod 700 %s", sshFolder)
-	_, _, err = conn.runSudoPassword(chmodsshCmd, args.password)
+	_, _, err = conn.RunSudoPassword(chmodsshCmd, args.Password)
 	if err != nil {
 		return false, fmt.Errorf("error setting permissions to ssh folder: %w", err)
 	}
 
 	chmodAkpath := fmt.Sprintf("chmod 600 %s", authorizedKeysPath)
-	_, _, err = conn.runSudoPassword(chmodAkpath, args.password)
+	_, _, err = conn.RunSudoPassword(chmodAkpath, args.Password)
 	if err != nil {
 		return false, fmt.Errorf("error setting permissions to authorized_keys: %w", err)
 	}
 
-	ownership := fmt.Sprintf("%s:%s", args.user, args.group)
+	ownership := fmt.Sprintf("%s:%s", args.User, args.Group)
 	chownsshCmd := fmt.Sprintf("chown %s %s", ownership, sshFolder)
-	_, _, err = conn.runSudoPassword(chownsshCmd, args.password)
+	_, _, err = conn.RunSudoPassword(chownsshCmd, args.Password)
 	if err != nil {
 		return false, fmt.Errorf("error setting ownership of ssh folder: %w", err)
 	}
 
 	chownAkpCmd := fmt.Sprintf("chown %s %s", ownership, authorizedKeysPath)
-	_, _, err = conn.runSudoPassword(chownAkpCmd, args.password)
+	_, _, err = conn.RunSudoPassword(chownAkpCmd, args.Password)
 	if err != nil {
 		return false, fmt.Errorf("error setting ownership of authorized_keys: %w", err)
 	}
@@ -241,6 +242,11 @@ func getAWSSavedKeys(bucket string, item string, region string) ([]string, error
 	return publicKeys, nil
 }
 
+func expandPath(path string) string {
+	res, _ := homedir.Expand(path)
+	return res
+}
+
 func publicKey(path string) ssh.AuthMethod {
 	key, err := ioutil.ReadFile(expandPath(path))
 	if err != nil {
@@ -251,4 +257,16 @@ func publicKey(path string) ssh.AuthMethod {
 		panic(err)
 	}
 	return ssh.PublicKeys(signer)
+}
+
+func removeDuplicateStr(strSlice []string) []string {
+	allKeys := make(map[string]bool)
+	list := []string{}
+	for _, item := range strSlice {
+		if _, value := allKeys[item]; !value {
+			allKeys[item] = true
+			list = append(list, item)
+		}
+	}
+	return list
 }
