@@ -26,4 +26,7 @@ RUN echo pi:raspberry | chpasswd
 
 EXPOSE 22
 
+RUN ln -s /usr/sbin/chpasswd /usr/bin/chpasswd
+RUN ln -s /usr/sbin/usermod /usr/bin/usermod
+
 CMD ["/usr/sbin/sshd", "-D"]
