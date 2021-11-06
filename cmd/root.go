@@ -20,7 +20,7 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "rpi-provision",
+	Use:   "rpi-provisioner",
 	Short: "Setup a new raspberry in minutes",
 	Long: `Features:
  - Enable ssh and wifi before first boot

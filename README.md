@@ -1,4 +1,4 @@
-# Rpi-provision
+# Rpi-provisioner
 
 _Have your raspberry pi ready to go using a couple commands._
 
@@ -50,7 +50,7 @@ $ rpi-provisioner boot --help
 Enable ssh, modify cmdline.txt and setup wifi connection
 
 Usage:
-  rpi-provision boot [BOOT_PATH] [flags]
+  rpi-provisioner boot [BOOT_PATH] [flags]
 
 Flags:
       --cmdline stringArray   Extra args to append to cmdline.txt (default [cgroup_enable=cpuset,cgroup_enable=memory,cgroup_memory=1])
@@ -70,7 +70,7 @@ $ rpi-provisioner authorized-keys --help
 Download keys from the S3 bucket and update them.
 
 Usage:
-  rpi-provision authorized-keys [flags]
+  rpi-provisioner authorized-keys [flags]
 
 Flags:
   -h, --help               help for authorized-keys
@@ -95,7 +95,7 @@ $ rpi-provisioner network --help
 Set up static ip for eth0 and wlan0.
 
 Usage:
-  rpi-provision network [flags]
+  rpi-provisioner network [flags]
 
 Flags:
   -h, --help              help for network
@@ -124,7 +124,7 @@ Layer 1 uses the default user and bash shell. It will perform the following task
  - [optional] static ip configuration
 
 Usage:
-  rpi-provision layer1 [flags]
+  rpi-provisioner layer1 [flags]
 
 Flags:
       --deployer-password string   Deployer password
@@ -155,7 +155,7 @@ Layer 2 uses the deployer user and bash. It will perform the following tasks:
 - Install docker
 
 Usage:
-  rpi-provision layer2 [flags]
+  rpi-provisioner layer2 [flags]
 
 Flags:
   -h, --help          help for layer2
