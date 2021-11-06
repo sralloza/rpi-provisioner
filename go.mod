@@ -1,4 +1,4 @@
-module github.com/sralloza/rpi-provision
+module github.com/sralloza/rpi-provisioner
 
 go 1.17
 
