@@ -1,0 +1,51 @@
+# workflow name
+name: Generate release-artifacts
+
+# on events
+on:
+  # push:
+  release:
+    types:
+        - created
+
+# workflow tasks
+jobs:
+  generate:
+    name: Generate cross-platform builds
+    runs-on: ubuntu-latest
+    env:
+      name: rpi-provisioner
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v2
+
+      - uses: actions/setup-go@v2
+        with:
+          go-version: '^1.17.1'
+
+      - name: Build for windows
+        run: GOOS=windows GOARCH=amd64 go build -o build/$name-windows-amd64.exe
+
+      - name: Build for linux amd64
+        run: GOOS=linux GOARCH=amd64 go build -o build/$name-linux-amd64
+
+      - name: Build for linux arm
+        run: GOOS=linux GOARCH=arm go build -o build/$name-linux-arm
+
+      - name: Build for darwin amd64
+        run: GOOS=darwin GOARCH=amd64 go build -o build/$name-darwin-amd64
+
+      - name: List files
+        run: ls -l build
+
+      - name: Create Release
+        uses: ncipollo/release-action@v1
+        with:
+          allowUpdates: true
+          artifactErrorsFailBuild: true
+          artifacts: "build/*"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          omitBodyDuringUpdate: true
+          omitNameDuringUpdate: true
+          omitPrereleaseDuringUpdate: true
+          draft: false
