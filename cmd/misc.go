@@ -3,8 +3,6 @@ package cmd
 import (
 	"fmt"
 	"strings"
-
-	homedir "github.com/mitchellh/go-homedir"
 )
 
 func splitAwsPath(awsPath string) (string, string, string, error) {
@@ -17,11 +15,6 @@ func splitAwsPath(awsPath string) (string, string, string, error) {
 		return "", "", "", fmt.Errorf(AwsErrorMsg, awsPath)
 	}
 	return chunks[0], chunks[1], chunks[2], nil
-}
-
-func expandPath(path string) string {
-	res, _ := homedir.Expand(path)
-	return res
 }
 
 func removeDuplicateStr(strSlice []string) []string {
