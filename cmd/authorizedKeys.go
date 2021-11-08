@@ -20,7 +20,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"github.com/sralloza/rpi-provision/ssh"
+	"github.com/sralloza/rpi-provisioner/ssh"
 )
 
 type authorizedKeysArgs struct {
@@ -83,6 +83,7 @@ func updateAuthorizedKeys(args authorizedKeysArgs) error {
 	conn := ssh.SSHConnection{
 		Password:  args.password,
 		UseSSHKey: args.useSSHKey,
+		Debug: DebugFlag,
 	}
 
 	err = conn.Connect(args.user, address)

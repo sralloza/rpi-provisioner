@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/sralloza/rpi-provision/ssh"
+	"github.com/sralloza/rpi-provisioner/ssh"
 	funk "github.com/thoas/go-funk"
 
 	"github.com/spf13/cobra"
@@ -67,6 +67,7 @@ func ProvisionLayer2(args Layer2Args) error {
 	address := fmt.Sprintf("%s:%d", args.host, args.port)
 	conn := ssh.SSHConnection{
 		UseSSHKey: true,
+		Debug: DebugFlag,
 	}
 	err := conn.Connect(args.user, address)
 	if err != nil {
@@ -200,7 +201,7 @@ func InstallOhMyFish(conn ssh.SSHConnection, args Layer2Args) (bool, error) {
 		return false, nil
 	}
 
-	_, _, err = conn.run("curl -L https://raw.githubusercontent.com/oh-my-fish/oh-my-fish/master/bin/install > /tmp/omf.sh")
+	_, _, err = conn.Run("curl -L https://raw.githubusercontent.com/oh-my-fish/oh-my-fish/master/bin/install > /tmp/omf.sh")
 	if err != nil {
 		return false, fmt.Errorf("error downloading oh-my-fish installer: %w", err)
 	}

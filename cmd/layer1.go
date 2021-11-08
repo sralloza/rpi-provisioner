@@ -22,7 +22,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/sralloza/rpi-provision/ssh"
+	"github.com/sralloza/rpi-provisioner/ssh"
 )
 
 type Layer1Args struct {
@@ -108,6 +108,7 @@ func ProvisionLayer1(args Layer1Args) error {
 	conn := ssh.SSHConnection{
 		Password:  args.loginPassword,
 		UseSSHKey: false,
+		Debug: DebugFlag,
 	}
 
 	err = conn.Connect(args.loginUser, address)

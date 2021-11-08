@@ -22,7 +22,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/sralloza/rpi-provision/ssh"
+	"github.com/sralloza/rpi-provisioner/ssh"
 )
 
 type NetworkingArgs struct {
@@ -76,6 +76,7 @@ func networkingEntrypoint(args NetworkingArgs) error {
 	conn := ssh.SSHConnection{
 		Password:  args.password,
 		UseSSHKey: args.useSSHKey,
+		Debug: DebugFlag,
 	}
 
 	err := conn.Connect(args.user, address)
