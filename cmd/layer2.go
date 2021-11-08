@@ -67,7 +67,7 @@ func ProvisionLayer2(args Layer2Args) error {
 	address := fmt.Sprintf("%s:%d", args.host, args.port)
 	conn := ssh.SSHConnection{
 		UseSSHKey: true,
-		Debug: DebugFlag,
+		Debug:     DebugFlag,
 	}
 	err := conn.Connect(args.user, address)
 	if err != nil {
@@ -204,6 +204,12 @@ func InstallOhMyFish(conn ssh.SSHConnection, args Layer2Args) (bool, error) {
 	_, _, err = conn.Run("curl -L https://raw.githubusercontent.com/oh-my-fish/oh-my-fish/master/bin/install > /tmp/omf.sh")
 	if err != nil {
 		return false, fmt.Errorf("error downloading oh-my-fish installer: %w", err)
+	}
+
+	rmOmfCmd := fmt.Sprintf("sudo rm -rf /home/%s/.local/share/omf", args.user)
+	_, _, err = conn.RunSudo(rmOmfCmd)
+	if err != nil {
+		return false, fmt.Errorf("couldn't remove omf install dir: %w", err)
 	}
 
 	_, _, err = conn.Run("fish /tmp/omf.sh --noninteractive")
