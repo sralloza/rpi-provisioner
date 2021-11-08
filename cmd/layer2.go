@@ -199,7 +199,7 @@ func InstallOhMyFish(conn SSHConnection, args Layer2Args) (bool, error) {
 		return false, nil
 	}
 
-	_, _, err = conn.run("curl -L https://get.oh-my.fish > /tmp/omf.sh")
+	_, _, err = conn.run("curl -L https://raw.githubusercontent.com/oh-my-fish/oh-my-fish/master/bin/install > /tmp/omf.sh")
 	if err != nil {
 		return false, fmt.Errorf("error downloading oh-my-fish installer: %w", err)
 	}
