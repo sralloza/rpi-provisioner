@@ -157,7 +157,7 @@ func setupBoot(args BootArgs, bootPath string) error {
 	if len(args.wifiSSID) == 0 && len(args.wifiPass) == 0 {
 		println("Skipping setting up Wifi connection")
 	} else {
-		err = setup_wifi_connection(args.country, bootPath, args.wifiSSID, args.wifiPass)
+		err = setup_wifi_connection(bootPath, args.wifiSSID, args.wifiPass, args.country)
 		if err != nil {
 			return err
 		}
