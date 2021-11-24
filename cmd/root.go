@@ -28,6 +28,9 @@ var rootCmd = &cobra.Command{
  - Update system
 
 After using this script use k3sup to launch the cluster.`,
+	SilenceErrors: true,
+	SilenceUsage:  true,
+	Version: "1.3.0",
 }
 
 var DebugFlag bool
