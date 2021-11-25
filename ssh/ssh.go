@@ -23,6 +23,7 @@ type SSHConnection struct {
 	Password  string
 	UseSSHKey bool
 	Debug     bool
+	Timeout   int
 }
 
 func (c *SSHConnection) Connect(user string, address string) error {

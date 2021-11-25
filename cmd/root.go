@@ -46,6 +46,7 @@ func init() {
 	rootCmd.AddCommand(NewAuthorizedKeysCmd())
 	rootCmd.AddCommand(NewNetworkingCmd())
 	rootCmd.AddCommand(NewBootCmd())
+	rootCmd.AddCommand(NewFindCommand())
 
 	rootCmd.PersistentFlags().BoolVar(&DebugFlag, "debug", false, "Enable debug")
 }

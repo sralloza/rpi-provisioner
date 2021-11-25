@@ -114,7 +114,7 @@ func setupNetworking(conn ssh.SSHConnection, args interfaceArgs) (bool, error) {
 
 	wlan0Provisioned, err := provisionStaticIPIface(conn, args, "wlan0", 200)
 	if err != nil {
-		return false, fmt.Errorf("error provisioning static IP for wlan0", err)
+		return false, fmt.Errorf("error provisioning static IP for wlan0: %w", err)
 	}
 
 	if !eth0Provisioned && !wlan0Provisioned {
