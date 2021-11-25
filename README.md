@@ -37,7 +37,7 @@ Example:
 ```json
 {
   "key-id-1": "public-ssh-key-1",
-  "key-id-1": "public-ssh-key-1"
+  "key-id-2": "public-ssh-key-2"
 }
 ```
 
