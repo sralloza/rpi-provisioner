@@ -30,7 +30,7 @@ var rootCmd = &cobra.Command{
 After using this script use k3sup to launch the cluster.`,
 	SilenceErrors: true,
 	SilenceUsage:  true,
-	Version: "1.3.0-rc2",
+	Version: "1.3.0-rc3",
 }
 
 var DebugFlag bool
@@ -46,6 +46,7 @@ func init() {
 	rootCmd.AddCommand(NewAuthorizedKeysCmd())
 	rootCmd.AddCommand(NewNetworkingCmd())
 	rootCmd.AddCommand(NewBootCmd())
+	rootCmd.AddCommand(NewFindCommand())
 
 	rootCmd.PersistentFlags().BoolVar(&DebugFlag, "debug", false, "Enable debug")
 }
