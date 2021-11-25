@@ -19,7 +19,7 @@ Here is a list of all the features that [rpi-provisioner](./) has and the comman
 - Modify boot image to enable kubernetes cluster: [boot](commands/boot.md)
 - Find your raspberry's IP in your local network: [find](commands/find.md)
 - Create new user: [layer1](commands/layer1.md)
-- Setup SSH access using SSH keys: [layer1](commands/layer1.md), [authorized-keys](commands/authorizedKeys.md)
+- Setup SSH access using SSH keys: [layer1](commands/layer1.md), [authorized-keys](commands/authorized-keys.md)
 - Improve SSH security: [layer1](commands/layer1.md)
 - Set hostname: [layer1](commands/layer1.md)
 - Set static IP: [layer1](commands/layer1.md), [network](commands/network.md)

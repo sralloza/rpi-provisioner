@@ -41,7 +41,6 @@ nav:
     - layer 1: commands/layer1.md
     - layer 2: commands/layer2.md
   - QnA:
-    # - qna/index.md
     - Find raspberry IP address: qna/find-ip.md
     - Manage SSH keys: qna/ssh-keys-management.md
     - Set up static IP: qna/static-ip.md
@@ -71,8 +70,11 @@ markdown_extensions:
   - pymdownx.caret
   - pymdownx.critic
   - pymdownx.details
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
   - pymdownx.mark
   - pymdownx.smartsymbols
+  - pymdownx.snippets
   - pymdownx.superfences
   - pymdownx.tabbed
   - pymdownx.tilde
