@@ -10,9 +10,17 @@ That's why this repo was created. The first version was created in Python, but t
 
 ### Initial setup
 
-What happens if you don't have an spare screen and keyboard? Don't worry, this script has your back. After flashing your raspbian image into your ssh card, execute the `boot` command. It will setup the ssh server and optionally a wifi connection to work the first time you turn your raspberry on. By default it will also add some lines to `cmdline.txt` to enable some features needed to run a k3s cluster. If you want to disable it, pass `--cmdline=""` to the `boot` command.
+What happens if you don't have an spare screen and keyboard? Don't worry, this script has your back. After flashing your raspbian image into your ssh card, execute the `boot` command. It will setup the ssh server and optionally a **wifi connection** to work the first time you turn your raspberry on. By default it will also add some lines to `cmdline.txt` to enable some features needed to run a k3s cluster. If you want to disable it, pass `--cmdline=""` to the `boot` command.
 
 Note: you must pass the path of your sd card (the `BOOT_PATH` argument). In windows it will likely be `E:/`, `F:/` or something similar.
+
+### Raspberry's initial IPv4
+
+When you plug in your raspberry after enabling ssh connection, you can't know what its IPv4 is unless you have a spare screen or you have access to your router's configuration.
+
+This is where the `find` command comes in really handy. You only have to specify your network IP (like `--subnet=192.168.0.1/24` or `--subnet=10.0.0.1/24`). Well, in reality you don't have to even do this, because by default the program will get your local IP (excluding the WSL interface) and use it with a 24-bit mask to build your presumably network IP, so `LOCAL_IP/24`.
+
+There are some useful flags to make this command work, but the defaults will probably be just OK. For more info, refer to the [find command docs](#find).
 
 ### SSH Keys management
 
@@ -60,7 +68,30 @@ Flags:
       --wifi-ssid string      WiFi SSID
 
 Global Flags:
-      --debug   Enable debug                                                                                              21:33:29
+      --debug   Enable debug
+```
+
+### find
+
+```shell
+$ rpi-provisioner find --help
+Find your raspberry pi in your local network using SSH.
+
+Usage:
+  rpi-provisioner find [flags]
+
+Flags:
+  -h, --help              help for find
+      --live              Print valid hosts right after found
+      --password string   Password to login via ssh (default "raspberry")
+      --port int          Port to connect via ssh (default 22)
+      --subnet string     Subnet to find the raspberry
+      --time              Show hosts processing time
+      --timeout int       Timeout in ns to wait in ssh connections (default 1)
+      --user string       User to login via ssh (default "pi")
+
+Global Flags:
+      --debug   Enable debug
 ```
 
 ### authorized-keys

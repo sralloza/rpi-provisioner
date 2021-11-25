@@ -54,7 +54,7 @@ func NewFindCommand() *cobra.Command {
 	findCmd.Flags().IntVar(&args.port, "port", 22, "Port to connect via ssh")
 	findCmd.Flags().BoolVar(&args.live, "live", false, "Print valid hosts right after found")
 	findCmd.Flags().BoolVar(&args.time, "time", false, "Show hosts processing time")
-	findCmd.Flags().IntVar(&args.timeout, "timeout", 1, "Password to login via ssh")
+	findCmd.Flags().IntVar(&args.timeout, "timeout", 1, "Timeout in ns to wait in ssh connections")
 	return findCmd
 }
 
@@ -81,7 +81,7 @@ func findHost(args FindArgs) error {
 	validIPs := finder.findValidSSHHosts()
 	if args.time {
 		elapsed := time.Since(start)
-		fmt.Printf("Done (%s)", elapsed)
+		fmt.Printf("Done (%s)\n", elapsed)
 	} else {
 		fmt.Println("Done")
 	}
