@@ -11,7 +11,7 @@ func getIpsFromCIDR(CIDR string) ([]net.IP, error) {
 	_, ipv4Net, err := net.ParseCIDR(CIDR)
 
 	if err != nil {
-		return []net.IP{}, err
+		return []net.IP{}, fmt.Errorf("error paring CIDR: %w", err)
 	}
 
 	// convert IPNet struct mask and address to uint32
@@ -37,7 +37,7 @@ func getIpsFromCIDR(CIDR string) ([]net.IP, error) {
 func getDefaultCDIR() (string, error) {
 	localIP, err := LocalIP()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("error getting local IP: %w", err)
 	}
 	return fmt.Sprintf("%v/24", localIP), nil
 }
@@ -46,12 +46,12 @@ func getDefaultCDIR() (string, error) {
 func LocalIP() (net.IP, error) {
 	ifaces, err := net.Interfaces()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error getting interfaces: %w", err)
 	}
 	for _, i := range ifaces {
 		addrs, err := i.Addrs()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("error getting interface addresses: %w", err)
 		}
 
 		for _, addr := range addrs {

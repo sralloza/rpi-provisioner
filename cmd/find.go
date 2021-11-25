@@ -18,6 +18,8 @@ package cmd
 import (
 	"fmt"
 	"net"
+	"sync"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/sralloza/rpi-provisioner/ssh"
@@ -27,6 +29,8 @@ type FindArgs struct {
 	subnet   string
 	user     string
 	password string
+	live     bool
+	time     bool
 	port     int
 	timeout  int
 }
@@ -48,6 +52,8 @@ func NewFindCommand() *cobra.Command {
 	findCmd.Flags().StringVar(&args.user, "user", "pi", "User to login via ssh")
 	findCmd.Flags().StringVar(&args.password, "password", "raspberry", "Password to login via ssh")
 	findCmd.Flags().IntVar(&args.port, "port", 22, "Port to connect via ssh")
+	findCmd.Flags().BoolVar(&args.live, "live", false, "Print valid hosts right after found")
+	findCmd.Flags().BoolVar(&args.time, "time", false, "Show hosts processing time")
 	findCmd.Flags().IntVar(&args.timeout, "timeout", 1, "Password to login via ssh")
 	return findCmd
 }
@@ -70,30 +76,53 @@ func findHost(args FindArgs) error {
 	fmt.Printf("Found %d IP addresses\n", len(ipv4List))
 
 	fmt.Println("Validating IP addresses...")
-	validIPs := findValidSSHHosts(ipv4List, args)
-	fmt.Println("Done")
+	start := time.Now()
+	finder := Finder{totalIPs: ipv4List, findArgs: args}
+	validIPs := finder.findValidSSHHosts()
+	if args.time {
+		elapsed := time.Since(start)
+		fmt.Printf("Done (%s)", elapsed)
+	} else {
+		fmt.Println("Done")
+	}
 
 	fmt.Printf("Valid ips: %v\n", validIPs)
 	return nil
 }
 
-func findValidSSHHosts(ipv4AddrList []net.IP, args FindArgs) []net.IP {
-	validIPs := []net.IP{}
-	for _, ip := range ipv4AddrList {
-		if checkSSHConnection(ip, args) {
-			validIPs = append(validIPs, ip)
-		}
-	}
-	return validIPs
+type Finder struct {
+	mu       sync.Mutex
+	wg       sync.WaitGroup
+	totalIPs []net.IP
+	validIPs []net.IP
+	findArgs FindArgs
 }
 
-func checkSSHConnection(ipv4Addr net.IP, args FindArgs) bool {
+func (f *Finder) findValidSSHHosts() []net.IP {
+	for _, ip := range f.totalIPs {
+		f.wg.Add(1)
+		go f.checkSSHConnection(ip)
+	}
+	f.wg.Wait()
+	return f.validIPs
+}
+
+func (f *Finder) checkSSHConnection(ipv4Addr net.IP) {
+	defer f.wg.Done()
 	connection := ssh.SSHConnection{
-		Password:  args.password,
+		Password:  f.findArgs.password,
 		UseSSHKey: false,
 		Debug:     false,
+		Timeout:   1,
 	}
-	addr := fmt.Sprintf("%v:%d", ipv4Addr, args.port)
-	err := connection.Connect(args.user, addr)
-	return err == nil
+	addr := fmt.Sprintf("%v:%d", ipv4Addr, f.findArgs.port)
+	err := connection.Connect(f.findArgs.user, addr)
+	if err == nil {
+		f.mu.Lock()
+		f.validIPs = append(f.validIPs, ipv4Addr)
+		if f.findArgs.live {
+			fmt.Printf("Found valid host: %v\n", ipv4Addr)
+		}
+		f.mu.Unlock()
+	}
 }
