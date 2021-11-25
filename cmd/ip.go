@@ -7,6 +7,8 @@ import (
 	"net"
 )
 
+var BlacklistedInterfaces = []string{"vEthernet (WSL)"}
+
 func getIpsFromCIDR(CIDR string) ([]net.IP, error) {
 	_, ipv4Net, err := net.ParseCIDR(CIDR)
 
@@ -42,13 +44,26 @@ func getDefaultCDIR() (string, error) {
 	return fmt.Sprintf("%v/24", localIP), nil
 }
 
+func isInterfaceBlacklisted(iName string) bool {
+	for _, blacklistedName := range BlacklistedInterfaces {
+		if blacklistedName == iName {
+			return true
+		}
+	}
+	return false
+}
+
 // LocalIP get the host machine local IP address
 func LocalIP() (net.IP, error) {
 	ifaces, err := net.Interfaces()
 	if err != nil {
 		return nil, fmt.Errorf("error getting interfaces: %w", err)
 	}
+
 	for _, i := range ifaces {
+		if isInterfaceBlacklisted(i.Name) {
+			continue
+		}
 		addrs, err := i.Addrs()
 		if err != nil {
 			return nil, fmt.Errorf("error getting interface addresses: %w", err)
