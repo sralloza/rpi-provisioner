@@ -18,7 +18,7 @@ Note: you must pass the path of your sd card (the `BOOT_PATH` argument). In wind
 
 When you plug in your raspberry after enabling ssh connection, you can't know what its IPv4 is unless you have a spare screen or you have access to your router's configuration.
 
-This is where the `find` command comes in really handy. You only have to specify your network IP (like `--subnet=192.168.0.1/24` or `--subnet=10.0.0.1/24`). Well, in reality you don't have to even do this, because by default the program will get your local IP (excluding the WSL interface) and use it with a 24-bit mask to build your presumably network IP, so `LOCAL_IP/24`.
+This is where the `find` command comes in really handy. You only have to specify your network IP (like `--subnet=192.168.0.1/24` or `--subnet=10.0.0.1/24`). Actually, you don't have to even do this, because by default the program will get your local IP (excluding the WSL interface) and use it with a 24-bit mask to build your presumably network IP, so `LOCAL_IP/24`.
 
 There are some useful flags to make this command work, but the defaults will probably be just OK. For more info, refer to the [find command docs](#find).
 
@@ -225,7 +225,9 @@ rpi-provisioner find --time --live
 
 ### authorized-keys example
 
+```shell
 rpi-provisioner authorized-keys --ssh-key --host $RASPBERRY_IP --user $USER --s3-path $S3_REGION/$S3_BUCKET/$S3_FILE
+```
 
 ### layer1 example
 
