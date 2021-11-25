@@ -51,6 +51,10 @@ You will probably ssh often into your rapsberry pi, you chances are you want to 
 
 ## Commands
 
+All commands have a debug global flag: `--debug`. It will enable debug mode, showing exactly which commands are executed via SSH, their output and their error. The error only appears if the command returns a non zero status code, otherwise it will be `<nil>`.
+
+Logs format: `ssh: "REMOTE_COMMAND" -> ["COMMAND_STDOUT" | "COMMAND_STDERR" | ERROR]`
+
 ### boot
 
 ```shell
