@@ -76,8 +76,8 @@ func NewLayer1Cmd() *cobra.Command {
 		},
 	}
 
-	layer1Cmd.Flags().StringVar(&args.loginUser, "login-user", "", "Login user")
-	layer1Cmd.Flags().StringVar(&args.loginPassword, "login-password", "", "Login password")
+	layer1Cmd.Flags().StringVar(&args.loginUser, "login-user", "pi", "Login user")
+	layer1Cmd.Flags().StringVar(&args.loginPassword, "login-password", "raspberry", "Login password")
 	layer1Cmd.Flags().StringVar(&args.deployerPassword, "deployer-user", "", "Deployer user")
 	layer1Cmd.Flags().StringVar(&args.deployerUser, "deployer-password", "", "Deployer password")
 	layer1Cmd.Flags().StringVar(&args.rootPassword, "root-password", "", "Root password")
@@ -88,8 +88,6 @@ func NewLayer1Cmd() *cobra.Command {
 	layer1Cmd.Flags().StringVar(&args.keysPath, "keys-path", "", "Local keys file path. You can select the public key file or a file containing multiple public keys.")
 	layer1Cmd.Flags().IPVar(&args.staticIP, "static-ip", nil, "Set up the static ip for eth0 and wlan0")
 
-	layer1Cmd.MarkFlagRequired("login-user")
-	layer1Cmd.MarkFlagRequired("login-password")
 	layer1Cmd.MarkFlagRequired("deployer-user")
 	layer1Cmd.MarkFlagRequired("deployer-password")
 	layer1Cmd.MarkFlagRequired("host")
