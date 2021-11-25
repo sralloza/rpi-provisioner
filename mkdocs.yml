@@ -1,0 +1,98 @@
+site_name: rpi-provisioner
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to dark mode
+      primary: blue
+    - scheme: slate
+      toggle:
+        icon: material/weather-night
+        name: Switch to light mode
+      primary: blue
+  font:
+    text: Roboto
+    code: Roboto Mono
+  features:
+    - navigation.indexes
+    - navigation.instant
+    - navigation.top
+    - navigation.tracking
+    - search.highlight
+    - search.share
+    - search.suggest
+
+  logo: http://assets.stickpng.com/images/584830fecef1014c0b5e4aa2.png
+  favicon: http://assets.stickpng.com/images/584830fecef1014c0b5e4aa2.png
+
+copyright: MIT
+
+nav:
+  - Overview: index.md
+  - Commands:
+    - commands/index.md
+    - boot: commands/boot.md
+    - find: commands/find.md
+    - authorized-keys: commands/authorized-keys.md
+    - network: commands/network.md
+    - layer 1: commands/layer1.md
+    - layer 2: commands/layer2.md
+  - QnA:
+    # - qna/index.md
+    - Find raspberry IP address: qna/find-ip.md
+    - Manage SSH keys: qna/ssh-keys-management.md
+    - Set up static IP: qna/static-ip.md
+  - Examples: examples.md
+
+repo_name: sralloza/rpi-provisioner
+repo_url: https://github.com/sralloza/rpi-provisioner
+
+extra_css:
+  - css/colors.css
+
+extra_javascript:
+  - js/links.js
+  - js/tablesort.js
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://unpkg.com/mermaid@8.4.6/dist/mermaid.min.js
+  - https://cdnjs.cloudflare.com/ajax/libs/tablesort/5.2.1/tablesort.min.js
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - codehilite
+  - def_list
+  - extra
+  - footnotes
+  - md_in_html
+  - pymdownx.caret
+  - pymdownx.critic
+  - pymdownx.details
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.superfences
+  - pymdownx.tabbed
+  - pymdownx.tilde
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:materialx.emoji.twemoji
+      emoji_generator: !!python/name:materialx.emoji.to_svg
+  - markdown.extensions.codehilite:
+      guess_lang: false
+  - markdown_include.include:
+      base_path: content
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - toc:
+      permalink: 🔗
+
+plugins:
+  - git-revision-date-localized:
+      type: date
+      fallback_to_build_date: true
+      enable_creation_date: true
+  - search
