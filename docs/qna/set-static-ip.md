@@ -5,11 +5,11 @@ You will probably ssh often into your rapsberry pi, you chances are you want to 
 To login via user & password:
 
 ```shell
-rpi-provisioner --host $CURRENT_IP --ip $NEW_IP --user $USER --password $PASSWORD
+rpi-provisioner --host $CURRENT_IP_OR_HOSTNAME --ip $NEW_IP --user $USER --password $PASSWORD
 ```
 
 To login via ssh key (it's assumed to be at `$HOME/.ssh/id_rsa`):
 
 ```shell
-rpi-provisioner --host $CURRENT_IP --ip $NEW_IP --user $USER --ssh-key
+rpi-provisioner --host $CURRENT_IP_OR_HOSTNAME --ip $NEW_IP --user $USER --ssh-key
 ```

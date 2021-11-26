@@ -41,9 +41,10 @@ nav:
     - layer 1: commands/layer1.md
     - layer 2: commands/layer2.md
   - QnA:
+    - qna/index.md
     - Find raspberry IP address: qna/find-ip.md
     - Manage SSH keys: qna/ssh-keys-management.md
-    - Set up static IP: qna/static-ip.md
+    - Set up static IP: qna/set-static-ip.md
   - Examples: examples.md
 
 repo_name: sralloza/rpi-provisioner
@@ -51,6 +52,7 @@ repo_url: https://github.com/sralloza/rpi-provisioner
 
 extra_css:
   - css/colors.css
+  - css/links.css
 
 extra_javascript:
   - js/links.js
