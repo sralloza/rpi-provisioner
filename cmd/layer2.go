@@ -196,7 +196,7 @@ func InstallFish(conn ssh.SSHConnection, args Layer2Args) (bool, error) {
 }
 
 func InstallOhMyFish(conn ssh.SSHConnection, args Layer2Args) (bool, error) {
-	_, _, err := conn.Run("which omf")
+	_, _, err := conn.Run("omf --version")
 	if err == nil {
 		return false, nil
 	}
