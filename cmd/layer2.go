@@ -250,10 +250,12 @@ func InstallDocker(conn ssh.SSHConnection, args Layer2Args) (bool, error) {
 		return false, fmt.Errorf("error downloading docker installer: %w", err)
 	}
 
-	_, _, err = conn.Run("sudo sh /tmp/get-docker.sh")
-	if err != nil {
-		return false, fmt.Errorf("error executing docker installer: %w", err)
-	}
+	conn.Run("sudo sh /tmp/get-docker.sh")
+	// if err != nil {
+	// 	extra := fmt.Sprintf("  Consider rebooting the server and then execute the layer2 command again\n"+
+	// 		"    ssh %s@%s sudo reboot\n", args.user, args.host)
+	// 	// return false, fmt.Errorf("error executing docker installer: %w\n%s", err, extra)
+	// }
 
 	_, _, err = conn.Run("rm /tmp/get-docker.sh")
 	if err != nil {
