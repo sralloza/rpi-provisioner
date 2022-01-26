@@ -10,12 +10,12 @@ Usage:
 Flags:
   -h, --help              help for find
       --live              Print valid hosts right after found
-      --password string   Password to login via ssh (default "raspberry")
-      --port int          Port to connect via ssh (default 22)
+      --password string   Password to login via SSH (default "raspberry")
+      --port int          Port to connect via SSH (default 22)
       --subnet string     Subnet to find the raspberry
       --time              Show hosts processing time
-      --timeout int       Timeout in ns to wait in ssh connections (default 1)
-      --user string       User to login via ssh (default "pi")
+      --timeout int       Timeout in ns to wait in SSH connections (default 1)
+      --user string       User to login via SSH (default "pi")
 
 Global Flags:
       --debug   Enable debug

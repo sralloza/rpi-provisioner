@@ -42,7 +42,7 @@ func (c *SSHConnection) Connect(user string, address string) error {
 	}
 	conn, err := ssh.Dial("tcp", address, c.config)
 	if err != nil {
-		return fmt.Errorf("could not stablish ssh connection: %w", err)
+		return fmt.Errorf("could not stablish SSH connection: %w", err)
 	}
 	c.conn = conn
 	return nil

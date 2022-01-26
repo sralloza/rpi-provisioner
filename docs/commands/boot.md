@@ -2,7 +2,7 @@
 
 ```shell
 $ rpi-provisioner boot --help
-Enable ssh, modify cmdline.txt and setup wifi connection
+Enable SSH, modify cmdline.txt and setup wifi connection
 
 Usage:
   rpi-provisioner boot [BOOT_PATH] [flags]

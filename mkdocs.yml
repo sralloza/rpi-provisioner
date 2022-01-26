@@ -42,9 +42,11 @@ nav:
     - layer 2: commands/layer2.md
   - QnA:
     - qna/index.md
+    - Enable SSH and set up WiFi before first boot: qna\setup-ssh-wifi-before-first-boot.md
     - Find raspberry IP address: qna/find-ip.md
     - Manage SSH keys: qna/ssh-keys-management.md
     - Set up static IP: qna/set-static-ip.md
+    - Set up hostname, user: qna/layer1.md
   - Examples: examples.md
 
 repo_name: sralloza/rpi-provisioner

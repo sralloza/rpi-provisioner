@@ -36,8 +36,8 @@ func NewBootCmd() *cobra.Command {
 	args := BootArgs{}
 	var bootCmd = &cobra.Command{
 		Use:   "boot [BOOT_PATH]",
-		Short: "Setup image before first boot",
-		Long:  `Enable ssh, modify cmdline.txt and setup wifi connection`,
+		Short: "Set up image before first boot",
+		Long:  `Enable SSH, modify cmdline.txt and set up wifi connection`,
 		Args: func(cmd *cobra.Command, posArgs []string) error {
 			if len(posArgs) != 1 {
 				return fmt.Errorf("BOOT_PATH is required")
@@ -89,7 +89,7 @@ func isDirectory(path string) bool {
 }
 
 func enableSSH(bootPath string) error {
-	fmt.Print("Enabling ssh... ")
+	fmt.Print("Enabling SSH... ")
 	emptyFile, err := os.Create(filepath.Join(bootPath, "ssh"))
 	if err != nil {
 		fmt.Println("FAIL")

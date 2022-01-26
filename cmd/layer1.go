@@ -47,7 +47,7 @@ func NewLayer1Cmd() *cobra.Command {
 		Long: `Layer 1 uses the default user and bash shell. It will perform the following tasks:
  - Create deployer user
  - Set hostname
- - Setup ssh config and keys
+ - Set up SSH config and keys
  - Disable pi login
  - [optional] static ip configuration
  `,
@@ -70,7 +70,8 @@ func NewLayer1Cmd() *cobra.Command {
 			fmt.Println(
 				"Note: you must restart the server to apply the hostname change " +
 					"and suppress the security risk warning")
-			fmt.Println("\nContinue with layer 2 or ssh into server:")
+			fmt.Printf("  ssh %s@%s sudo reboot\n", args.deployerUser, args.host)
+			fmt.Println("\nContinue with layer 2 or SSH into server:")
 			fmt.Printf("  ssh %s@%s\n", args.deployerUser, args.host)
 			return nil
 		},
@@ -342,18 +343,18 @@ func setupsshdConfig(conn ssh.SSHConnection, args Layer1Args) (bool, error) {
 	permitRootLoginCmd := fmt.Sprintf("sed -i \"s/^#?PermitRootLogin yes/PermitRootLogin no/\" %s", config)
 	_, _, err = conn.RunSudoPassword(permitRootLoginCmd, args.loginPassword)
 	if err != nil {
-		return false, fmt.Errorf("error disabling ssh root login: %w", err)
+		return false, fmt.Errorf("error disabling SSH root login: %w", err)
 	}
 
 	passwordAuthCmd := fmt.Sprintf("sed -i \"s/^#?PasswordAuthentication yes/PasswordAuthentication no/\" %s", config)
 	_, _, err = conn.RunSudoPassword(passwordAuthCmd, args.loginPassword)
 	if err != nil {
-		return false, fmt.Errorf("error disabling ssh password auth: %w", err)
+		return false, fmt.Errorf("error disabling SSH password auth: %w", err)
 	}
 
-	_, _, err = conn.RunSudoPassword("service ssh reload", args.loginPassword)
+	_, _, err = conn.RunSudoPassword("service SSH reload", args.loginPassword)
 	if err != nil {
-		return false, fmt.Errorf("error reloading ssh service: %w", err)
+		return false, fmt.Errorf("error reloading SSH service: %w", err)
 	}
 
 	return true, nil

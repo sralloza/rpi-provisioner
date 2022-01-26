@@ -5,7 +5,7 @@ $ rpi-provisioner layer1 --help
 Layer 1 uses the default user and bash shell. It will perform the following tasks:
  - Create deployer user
  - Set hostname
- - Setup ssh config and keys
+ - Set up SSH config and keys
  - Disable pi login
  - [optional] static ip configuration
 

@@ -58,7 +58,7 @@ func NewAuthorizedKeysCmd() *cobra.Command {
 		},
 	}
 
-	authorizedKeysCmd.Flags().BoolVar(&args.useSSHKey, "ssh-key", false, "Use ssh key")
+	authorizedKeysCmd.Flags().BoolVar(&args.useSSHKey, "ssh-key", false, "Use SSH key")
 	authorizedKeysCmd.Flags().StringVar(&args.user, "user", "", "Login user")
 	authorizedKeysCmd.Flags().StringVar(&args.password, "password", "", "Login password")
 	authorizedKeysCmd.Flags().StringVar(&args.host, "host", "", "Server host")

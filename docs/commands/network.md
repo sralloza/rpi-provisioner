@@ -13,7 +13,7 @@ Flags:
       --ip ip             New IP
       --password string   Login password
       --port int          Server SSH port (default 22)
-      --ssh-key           Use ssh key
+      --ssh-key           Use SSH key
       --user string       Login user
 
 Global Flags:

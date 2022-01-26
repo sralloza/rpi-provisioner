@@ -49,12 +49,12 @@ func NewFindCommand() *cobra.Command {
 		},
 	}
 	findCmd.Flags().StringVar(&args.subnet, "subnet", "", "Subnet to find the raspberry")
-	findCmd.Flags().StringVar(&args.user, "user", "pi", "User to login via ssh")
-	findCmd.Flags().StringVar(&args.password, "password", "raspberry", "Password to login via ssh")
-	findCmd.Flags().IntVar(&args.port, "port", 22, "Port to connect via ssh")
+	findCmd.Flags().StringVar(&args.user, "user", "pi", "User to login via SSH")
+	findCmd.Flags().StringVar(&args.password, "password", "raspberry", "Password to login via SSH")
+	findCmd.Flags().IntVar(&args.port, "port", 22, "Port to connect via SSH")
 	findCmd.Flags().BoolVar(&args.live, "live", false, "Print valid hosts right after found")
 	findCmd.Flags().BoolVar(&args.time, "time", false, "Show hosts processing time")
-	findCmd.Flags().IntVar(&args.timeout, "timeout", 1, "Timeout in ns to wait in ssh connections")
+	findCmd.Flags().IntVar(&args.timeout, "timeout", 1, "Timeout in ns to wait in SSH connections")
 	return findCmd
 }
 

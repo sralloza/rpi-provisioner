@@ -2,7 +2,7 @@
 
 > Have your raspberry pi ready to go using a couple commands.
 
-It's a real pain when your Raspberry Pi dies due to sdcard corruption and you have to set it up again. Install your favourite shell, update all packagaes, set up the ssh connection, the static ip address...
+It's a real pain when your Raspberry Pi dies due to sdcard corruption and you have to set it up again. Install your favourite shell, update all packagaes, set up the SSH connection, the static ip address...
 
 That's why [rpi-provisioner](./) was created. There is a command for (almost) any tedios part of having your raspberry up and running again.
 

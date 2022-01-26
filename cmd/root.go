@@ -21,10 +21,10 @@ import (
 
 var rootCmd = &cobra.Command{
 	Use:   "rpi-provisioner",
-	Short: "Setup a new raspberry in minutes",
+	Short: "Set up a new raspberry in minutes",
 	Long: `Features:
- - Enable ssh and wifi before first boot
- - Setup ssh keys
+ - Enable SSH and wifi before first boot
+ - Set up SSH keys
  - Update system
 
 After using this script use k3sup to launch the cluster.`,

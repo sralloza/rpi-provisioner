@@ -53,7 +53,7 @@ func NewNetworkingCmd() *cobra.Command {
 		},
 	}
 
-	networkingCmd.Flags().BoolVar(&args.useSSHKey, "ssh-key", false, "Use ssh key")
+	networkingCmd.Flags().BoolVar(&args.useSSHKey, "ssh-key", false, "Use SSH key")
 	networkingCmd.Flags().StringVar(&args.user, "user", "", "Login user")
 	networkingCmd.Flags().StringVar(&args.password, "password", "", "Login password")
 	networkingCmd.Flags().StringVar(&args.host, "host", "", "Server host")
