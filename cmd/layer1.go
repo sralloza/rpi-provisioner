@@ -62,15 +62,20 @@ func NewLayer1Cmd() *cobra.Command {
 		},
 		RunE: func(cmd *cobra.Command, posArgs []string) error {
 			fmt.Println("Provisioning layer 1...")
-			if err := ProvisionLayer1(args); err != nil {
+			provisioned, err := ProvisionLayer1(args)
+			if err != nil {
 				return err
 			}
 
 			fmt.Println("\nLayer 1 provisioned successfully")
-			fmt.Println(
-				"Note: you must restart the server to apply the hostname change " +
-					"and suppress the security risk warning")
-			fmt.Println("\nContinue with layer 2 or ssh into server:")
+			if provisioned {
+				fmt.Println(
+					"\nNote: you must restart the server to apply the hostname change " +
+						"and suppress the security risk warning")
+				fmt.Printf("  ssh %s@%s sudo reboot\n", args.deployerUser, args.host)
+			}
+
+			fmt.Println("\nContinue with layer 2 or SSH into server:")
 			fmt.Printf("  ssh %s@%s\n", args.deployerUser, args.host)
 			return nil
 		},
@@ -95,10 +100,10 @@ func NewLayer1Cmd() *cobra.Command {
 	return layer1Cmd
 }
 
-func ProvisionLayer1(args Layer1Args) error {
+func ProvisionLayer1(args Layer1Args) (bool, error) {
 	s3Region, s3Bucket, s3File, err := splitAwsPath(args.s3Path)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	address := fmt.Sprintf("%s:%d", args.host, args.port)
@@ -106,22 +111,22 @@ func ProvisionLayer1(args Layer1Args) error {
 	conn := ssh.SSHConnection{
 		Password:  args.loginPassword,
 		UseSSHKey: false,
-		Debug: DebugFlag,
+		Debug:     DebugFlag,
 	}
 
 	err = conn.Connect(args.loginUser, address)
 	if err != nil {
 		if strings.Contains(err.Error(), "no supported methods remain") {
 			fmt.Println("SSH Connection error, layer 1 should be provisioned")
-			return nil
+			return false, nil
 		}
-		return fmt.Errorf("SSH connection error: %w", err)
+		return false, fmt.Errorf("SSH connection error: %w", err)
 	}
 	defer conn.Close()
 
 	fmt.Println("Creating deployer group...")
 	if provisioned, err := createDeployerGroup(conn, args); err != nil {
-		return err
+		return false, err
 	} else if provisioned {
 		fmt.Println("Deployer group created")
 	} else {
@@ -130,7 +135,7 @@ func ProvisionLayer1(args Layer1Args) error {
 
 	fmt.Println("Provisioning deployer sudo access...")
 	if provisioned, err := provisionSudoer(conn, args); err != nil {
-		return err
+		return false, err
 	} else if provisioned {
 		fmt.Println("Deployer sudo access provisioned")
 	} else {
@@ -139,7 +144,7 @@ func ProvisionLayer1(args Layer1Args) error {
 
 	fmt.Println("Creating deployer user...")
 	if provisioned, err := createDeployerUser(conn, args); err != nil {
-		return err
+		return false, err
 	} else if provisioned {
 		fmt.Println("Deployer user created")
 	} else {
@@ -149,7 +154,7 @@ func ProvisionLayer1(args Layer1Args) error {
 	if len(args.rootPassword) > 0 {
 		fmt.Println("Provisioning sudo password...")
 		if provisioned, err := setRootPassword(conn, args); err != nil {
-			return nil
+			return false, nil
 		} else if provisioned {
 			fmt.Println("Root password provisioned")
 		} else {
@@ -167,7 +172,7 @@ func ProvisionLayer1(args Layer1Args) error {
 		S3Region: s3Region,
 		KeysPath: args.keysPath,
 	}); err != nil {
-		return err
+		return false, err
 	} else if provisioned {
 		fmt.Println("SSH keys provisioned")
 	} else {
@@ -176,7 +181,7 @@ func ProvisionLayer1(args Layer1Args) error {
 
 	fmt.Println("Configuring SSHD...")
 	if provisioned, err := setupsshdConfig(conn, args); err != nil {
-		return err
+		return false, err
 	} else if provisioned {
 		fmt.Println("SSHD configured")
 	} else {
@@ -185,7 +190,7 @@ func ProvisionLayer1(args Layer1Args) error {
 
 	fmt.Println("Provisioning hostname...")
 	if provisioned, err := setHostname(conn, args); err != nil {
-		return err
+		return false, err
 	} else if provisioned {
 		fmt.Println("Hostname provisioned")
 	} else {
@@ -194,7 +199,7 @@ func ProvisionLayer1(args Layer1Args) error {
 
 	fmt.Println("Disable loginUser login...")
 	if provisioned, err := disableLoginUser(conn, args); err != nil {
-		return err
+		return false, err
 	} else if provisioned {
 		fmt.Println("LoginUser login disabled")
 	} else {
@@ -207,7 +212,7 @@ func ProvisionLayer1(args Layer1Args) error {
 			ip:       args.staticIP,
 			password: args.loginPassword,
 		}); err != nil {
-			return err
+			return false, err
 		} else if provisioned {
 			fmt.Println("Static IP provisioned")
 		} else {
@@ -215,7 +220,7 @@ func ProvisionLayer1(args Layer1Args) error {
 		}
 	}
 
-	return nil
+	return true, nil
 }
 
 func createDeployerGroup(conn ssh.SSHConnection, args Layer1Args) (bool, error) {
