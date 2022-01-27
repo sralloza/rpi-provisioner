@@ -44,8 +44,14 @@ func NewLayer2Cmd() *cobra.Command {
 `,
 		RunE: func(cmd *cobra.Command, posArgs []string) error {
 			fmt.Println("Provisioning layer 2")
-			if err := ProvisionLayer2(args); err != nil {
+			err, dockerInstallErr := ProvisionLayer2(args)
+			if err != nil {
 				return err
+			}
+			if dockerInstallErr != nil {
+				fmt.Printf("\nDocker instalation failed, will probably be fixed with a reboot\n"+
+					"  Consider rebooting the server and then execute the layer2 command again\n"+
+					"    ssh %s@%s sudo reboot\n", args.user, args.host)
 			}
 			fmt.Println("Layer 2 provisioned")
 			return nil
@@ -63,7 +69,9 @@ func NewLayer2Cmd() *cobra.Command {
 
 }
 
-func ProvisionLayer2(args Layer2Args) error {
+func ProvisionLayer2(args Layer2Args) (error, error) {
+	var dockerInstallErr error = nil
+
 	address := fmt.Sprintf("%s:%d", args.host, args.port)
 	conn := ssh.SSHConnection{
 		UseSSHKey: true,
@@ -71,19 +79,19 @@ func ProvisionLayer2(args Layer2Args) error {
 	}
 	err := conn.Connect(args.user, address)
 	if err != nil {
-		return err
+		return err, dockerInstallErr
 	}
 	defer conn.Close()
 
 	fmt.Println("Updating and installing system libraries...")
 	if err := InstallLibraries(conn); err != nil {
-		return err
+		return err, dockerInstallErr
 	}
 	fmt.Println("Libraries updated successfully")
 
 	fmt.Println("Provisioning fish...")
 	if installed, err := InstallFish(conn, args); err != nil {
-		return err
+		return err, dockerInstallErr
 	} else if installed {
 		fmt.Println("fish provisioned successfully")
 	} else {
@@ -92,7 +100,7 @@ func ProvisionLayer2(args Layer2Args) error {
 
 	fmt.Println("Provisioning oh-my-fish...")
 	if installed, err := InstallOhMyFish(conn, args); err != nil {
-		return err
+		return err, dockerInstallErr
 	} else if installed {
 		fmt.Println("oh-my-fish provisioned successfully")
 	} else {
@@ -100,8 +108,9 @@ func ProvisionLayer2(args Layer2Args) error {
 	}
 
 	fmt.Println("Provisioning docker...")
-	if installed, err := InstallDocker(conn, args); err != nil {
-		return err
+	installed, dockerInstallErr, err := InstallDocker(conn, args)
+	if err != nil {
+		return err, dockerInstallErr
 	} else if installed {
 		fmt.Println("docker provisioned successfully")
 	} else {
@@ -110,14 +119,14 @@ func ProvisionLayer2(args Layer2Args) error {
 
 	fmt.Println("Provisioning docker-compose...")
 	if installed, err := InstallDockerCompose(conn, args); err != nil {
-		return err
+		return err, dockerInstallErr
 	} else if installed {
 		fmt.Println("docker-compose provisioned successfully")
 	} else {
 		fmt.Println("docker-compose already provisioned")
 	}
 
-	return nil
+	return nil, dockerInstallErr
 }
 
 func InstallLibraries(conn ssh.SSHConnection) error {
@@ -240,34 +249,36 @@ func InstallOhMyFish(conn ssh.SSHConnection, args Layer2Args) (bool, error) {
 	return true, nil
 }
 
-func InstallDocker(conn ssh.SSHConnection, args Layer2Args) (bool, error) {
+func InstallDocker(conn ssh.SSHConnection, args Layer2Args) (bool, error, error) {
+	var dockerInstallErr error = nil
+
 	_, _, err := conn.Run("which docker")
 	if err == nil {
-		return false, nil
+		return false, dockerInstallErr, nil
 	}
 	_, _, err = conn.Run("curl -fsSL https://get.docker.com -o /tmp/get-docker.sh")
 	if err != nil {
-		return false, fmt.Errorf("error downloading docker installer: %w", err)
+		return false, dockerInstallErr, fmt.Errorf("error downloading docker installer: %w", err)
 	}
 
-	conn.Run("sudo sh /tmp/get-docker.sh")
-	// if err != nil {
-	// 	extra := fmt.Sprintf("  Consider rebooting the server and then execute the layer2 command again\n"+
-	// 		"    ssh %s@%s sudo reboot\n", args.user, args.host)
-	// 	// return false, fmt.Errorf("error executing docker installer: %w\n%s", err, extra)
-	// }
+	// Docker instalation may fail, but a reboot should fix it
+	// https://stackoverflow.com/questions/59752840/docker-socket-failed-with-result-service-start-limit-hit-after-protecting-doc
+	_, _, err = conn.Run("sudo sh /tmp/get-docker.sh")
+	if err != nil {
+		dockerInstallErr = fmt.Errorf("error executing docker installer: %w", err)
+	}
 
 	_, _, err = conn.Run("rm /tmp/get-docker.sh")
 	if err != nil {
-		return false, fmt.Errorf("error removing docker installer: %w", err)
+		return false, dockerInstallErr, fmt.Errorf("error removing docker installer: %w", err)
 	}
 
 	_, _, err = conn.Run(fmt.Sprintf("sudo usermod -aG docker %s", args.user))
 	if err != nil {
-		return false, fmt.Errorf("error adding deployer to docker group: %w", err)
+		return false, dockerInstallErr, fmt.Errorf("error adding deployer to docker group: %w", err)
 	}
 
-	return true, nil
+	return true, dockerInstallErr, nil
 }
 
 func InstallDockerCompose(conn ssh.SSHConnection, args Layer2Args) (bool, error) {
