@@ -16,6 +16,7 @@ limitations under the License.
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -26,13 +27,14 @@ import (
 )
 
 type FindArgs struct {
-	subnet   string
-	user     string
-	password string
-	live     bool
-	time     bool
-	port     int
-	timeout  int
+	subnet    string
+	user      string
+	password  string
+	useSSHKey bool
+	live      bool
+	time      bool
+	port      int
+	timeout   int
 }
 
 func NewFindCommand() *cobra.Command {
@@ -51,6 +53,7 @@ func NewFindCommand() *cobra.Command {
 	findCmd.Flags().StringVar(&args.subnet, "subnet", "", "Subnet to find the raspberry")
 	findCmd.Flags().StringVar(&args.user, "user", "pi", "User to login via ssh")
 	findCmd.Flags().StringVar(&args.password, "password", "raspberry", "Password to login via ssh")
+	findCmd.Flags().BoolVar(&args.useSSHKey, "ssh-key", false, "Use SSH key")
 	findCmd.Flags().IntVar(&args.port, "port", 22, "Port to connect via ssh")
 	findCmd.Flags().BoolVar(&args.live, "live", false, "Print valid hosts right after found")
 	findCmd.Flags().BoolVar(&args.time, "time", false, "Show hosts processing time")
@@ -59,6 +62,9 @@ func NewFindCommand() *cobra.Command {
 }
 
 func findHost(args FindArgs) error {
+	if !args.useSSHKey && len(args.password) == 0 {
+		return errors.New("must pass --ssh-key or --password")
+	}
 	CIDR := args.subnet
 	if CIDR == "" {
 		defaultCDIR, err := getDefaultCDIR()
@@ -75,7 +81,7 @@ func findHost(args FindArgs) error {
 	}
 	fmt.Printf("Found %d IP addresses\n", len(ipv4List))
 
-	fmt.Println("Validating IP addresses...")
+	fmt.Printf("Validating IP addresses (user: %s)...\n", args.user)
 	start := time.Now()
 	finder := Finder{totalIPs: ipv4List, findArgs: args}
 	validIPs := finder.findValidSSHHosts()
@@ -111,7 +117,7 @@ func (f *Finder) checkSSHConnection(ipv4Addr net.IP) {
 	defer f.wg.Done()
 	connection := ssh.SSHConnection{
 		Password:  f.findArgs.password,
-		UseSSHKey: false,
+		UseSSHKey: f.findArgs.useSSHKey,
 		Debug:     false,
 		Timeout:   1,
 	}
