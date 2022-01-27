@@ -147,6 +147,7 @@ func InstallLibraries(conn ssh.SSHConnection) error {
 		"curl",
 		"git",
 		"libffi-dev",
+		"mailutils",
 		"nano",
 		"python3-pip",
 		"python3",
