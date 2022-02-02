@@ -126,6 +126,13 @@ func ProvisionLayer2(args Layer2Args) (error, error) {
 		fmt.Println("docker-compose already provisioned")
 	}
 
+	fmt.Println("Removing extra libraries...")
+	if err := AptAutoremove(conn, args); err != nil {
+		return err, dockerInstallErr
+	} else {
+		fmt.Println("Extra libraries removed successfully")
+	}
+
 	return nil, dockerInstallErr
 }
 
@@ -314,4 +321,13 @@ func InstallDockerCompose(conn ssh.SSHConnection, args Layer2Args) (bool, error)
 	}
 
 	return true, nil
+}
+
+func AptAutoremove(conn ssh.SSHConnection, args Layer2Args) error {
+	_, _, err := conn.RunSudo("apt autoremove -y")
+	if err != nil {
+		return fmt.Errorf("error removing extra libraries")
+	}
+
+	return nil
 }
