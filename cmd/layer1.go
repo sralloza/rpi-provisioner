@@ -338,19 +338,19 @@ func setupsshdConfig(conn ssh.SSHConnection, args Layer1Args) (bool, error) {
 		return false, fmt.Errorf("error creating backup of sshd config: %w", err)
 	}
 
-	usePamCmd := fmt.Sprintf("sed -i \"s/^#?UsePAM yes/UsePAM no/\" %s", config)
+	usePamCmd := fmt.Sprintf("sed -i \"s/^#*UsePAM yes/UsePAM no/\" %s", config)
 	_, _, err = conn.RunSudoPassword(usePamCmd, args.loginPassword)
 	if err != nil {
 		return false, fmt.Errorf("error resticting sshd PAM use: %w", err)
 	}
 
-	permitRootLoginCmd := fmt.Sprintf("sed -i \"s/^#?PermitRootLogin yes/PermitRootLogin no/\" %s", config)
+	permitRootLoginCmd := fmt.Sprintf("sed -i \"s/^#*PermitRootLogin yes/PermitRootLogin no/\" %s", config)
 	_, _, err = conn.RunSudoPassword(permitRootLoginCmd, args.loginPassword)
 	if err != nil {
 		return false, fmt.Errorf("error disabling ssh root login: %w", err)
 	}
 
-	passwordAuthCmd := fmt.Sprintf("sed -i \"s/^#?PasswordAuthentication yes/PasswordAuthentication no/\" %s", config)
+	passwordAuthCmd := fmt.Sprintf("sed -i \"s/^#*PasswordAuthentication yes/PasswordAuthentication no/\" %s", config)
 	_, _, err = conn.RunSudoPassword(passwordAuthCmd, args.loginPassword)
 	if err != nil {
 		return false, fmt.Errorf("error disabling ssh password auth: %w", err)
