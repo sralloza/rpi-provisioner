@@ -17,7 +17,6 @@ type Layer1Args struct {
 	deployerPassword string
 	rootPassword     string
 	host             string
-	hostname         string
 	port             int
 	s3Path           string
 	keysPath         string
@@ -31,7 +30,6 @@ func NewLayer1Cmd() *cobra.Command {
 		Short: "Provision layer 1",
 		Long: `Layer 1 uses the default user and bash shell. It will perform the following tasks:
  - Create deployer user
- - Set hostname
  - Setup ssh config and keys
  - Disable pi login
  - [optional] static ip configuration
@@ -72,7 +70,6 @@ func NewLayer1Cmd() *cobra.Command {
 	layer1Cmd.Flags().StringVar(&args.deployerUser, "deployer-password", "", "Deployer password")
 	layer1Cmd.Flags().StringVar(&args.rootPassword, "root-password", "", "Root password")
 	layer1Cmd.Flags().StringVar(&args.host, "host", "", "Server host")
-	layer1Cmd.Flags().StringVar(&args.hostname, "hostname", "", "Server hostname")
 	layer1Cmd.Flags().IntVar(&args.port, "port", 22, "Server SSH port")
 	layer1Cmd.Flags().StringVar(&args.s3Path, "s3-path", "", "Amazon S3 path. Must match the pattern region/bucket/file")
 	layer1Cmd.Flags().StringVar(&args.keysPath, "keys-path", "", "Local keys file path. You can select the public key file or a file containing multiple public keys.")
@@ -171,15 +168,6 @@ func ProvisionLayer1(args Layer1Args) (bool, error) {
 		fmt.Println("SSHD configured")
 	} else {
 		fmt.Println("SSHD already configured")
-	}
-
-	fmt.Println("Provisioning hostname...")
-	if provisioned, err := setHostname(conn, args); err != nil {
-		return false, err
-	} else if provisioned {
-		fmt.Println("Hostname provisioned")
-	} else {
-		fmt.Println("Hostname already provisioned")
 	}
 
 	fmt.Println("Disable loginUser login...")
@@ -347,44 +335,6 @@ func setupsshdConfig(conn ssh.SSHConnection, args Layer1Args) (bool, error) {
 	}
 
 	return true, nil
-}
-
-func setHostname(conn ssh.SSHConnection, args Layer1Args) (bool, error) {
-	hostnameData, _, err := conn.RunSudoPassword("cat /etc/hostname", args.loginPassword)
-	if err != nil {
-		return false, fmt.Errorf("error getting current hostname: %w", err)
-	}
-
-	currentHostname := strings.Trim(string(hostnameData), "\n")
-	needChangeHostname := currentHostname != args.hostname
-
-	if needChangeHostname {
-		hostnameCmd := fmt.Sprintf("echo \"%s\" > /etc/hostname", args.hostname)
-		_, _, err = conn.RunSudoPassword(hostnameCmd, args.loginPassword)
-		if err != nil {
-			return false, fmt.Errorf("error changing hostname: %w", err)
-		}
-	}
-
-	newHostsLine := fmt.Sprintf("127.0.0.1\t\t%s", args.hostname)
-
-	hostsContentData, _, err := conn.RunSudoPassword("cat /etc/hosts", args.loginPassword)
-	if err != nil {
-		return false, fmt.Errorf("error getting saved hosts: %w", err)
-	}
-
-	hostsContent := string(hostsContentData)
-	needUpdateHosts := !strings.Contains(hostsContent, newHostsLine)
-
-	if needUpdateHosts {
-		hostCmd := fmt.Sprintf("echo \"127.0.0.1\t\t%s\" >> /etc/hosts", args.hostname)
-		_, _, err = conn.RunSudoPassword(hostCmd, args.loginPassword)
-		if err != nil {
-			return false, fmt.Errorf("error updating hosts: %w", err)
-		}
-	}
-
-	return needChangeHostname || needUpdateHosts, nil
 }
 
 func disableLoginUser(conn ssh.SSHConnection, args Layer1Args) (bool, error) {
