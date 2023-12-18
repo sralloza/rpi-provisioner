@@ -61,8 +61,7 @@ func ProvisionLayer2(args Layer2Args) (error, error) {
 	address := fmt.Sprintf("%s:%d", args.host, args.port)
 	conn := ssh.SSHConnection{
 		UseSSHKey: true,
-		Debug:     DebugFlag,
-	}
+}
 	err := conn.Connect(args.user, address)
 	if err != nil {
 		return err, dockerInstallErr
@@ -186,8 +185,6 @@ func InstallFish(conn ssh.SSHConnection, args Layer2Args) (bool, error) {
 		return false, fmt.Errorf("error setting deployer's shell to fish: %w", err)
 	}
 
-	// Just for debug
-	conn.Run("fish --version")
 	return true, nil
 }
 

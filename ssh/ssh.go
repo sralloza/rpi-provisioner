@@ -3,12 +3,13 @@ package ssh
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
+	"os"
 	"sort"
 	"strings"
 
 	"github.com/mitchellh/go-homedir"
 	"github.com/sralloza/rpi-provisioner/pkg/authorizedkeys"
+	"github.com/sralloza/rpi-provisioner/pkg/logging"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -17,7 +18,6 @@ type SSHConnection struct {
 	conn      *ssh.Client
 	Password  string
 	UseSSHKey bool
-	Debug     bool
 	Timeout   int64
 }
 
@@ -44,7 +44,7 @@ func (c *SSHConnection) Connect(user string, address string) error {
 }
 
 func (c SSHConnection) Run(cmd string) (string, string, error) {
-	return runCommand(cmd, c.conn, c.Debug)
+	return runCommand(cmd, c.conn)
 }
 
 func (c SSHConnection) RunSudo(cmd string) (string, string, error) {
@@ -63,7 +63,7 @@ func basicSudoStdin(cmd string, password string) string {
 	return fmt.Sprintf("echo %s | sudo -S bash -c '%s'", password, cmd)
 }
 
-func runCommand(cmd string, conn *ssh.Client, debug bool) (string, string, error) {
+func runCommand(cmd string, conn *ssh.Client) (string, string, error) {
 	sess, err := conn.NewSession()
 	if err != nil {
 		panic(err)
@@ -84,9 +84,12 @@ func runCommand(cmd string, conn *ssh.Client, debug bool) (string, string, error
 	bufErr := new(strings.Builder)
 	io.Copy(bufErr, sessStderr)
 
-	if debug {
-		fmt.Printf("ssh: %#v -> [%#v | %#v | %v]\n\n", cmd, bufOut.String(), bufErr.String(), err)
-	}
+	logger := logging.Get()
+	logger.Debug().
+		Str("cmd", cmd).
+		Str("stdout", bufOut.String()).
+		Str("stderr", bufErr.String()).
+		Msg("Running command via ssh")
 
 	return bufOut.String(), bufErr.String(), err
 }
@@ -115,16 +118,17 @@ func UploadsshKeys(conn SSHConnection, args UploadsshKeysArgs) (bool, error) {
 		authorizedKeys = strings.Split(strings.Trim(fileContent, "\n"), "\n")
 	}
 
-	newKeys, err := authorizedkeys.Get(args.KeysUri)
+	newKeysInfo, err := authorizedkeys.Get(args.KeysUri)
 	if err != nil {
 		return false, fmt.Errorf("error getting authorized keys: %w", err)
 	}
 
-	for _, key := range newKeys {
-		authorizedKeys = append(authorizedKeys, key.String())
+	newKeys := []string{}
+	for _, key := range newKeysInfo {
+		newKeys = append(newKeys, key.String())
 	}
 
-	finalKeys := removeDuplicateStr(authorizedKeys)
+	finalKeys := removeDuplicateStr(newKeys)
 	sort.Strings(finalKeys)
 
 	newFileContent := strings.Trim(strings.Join(finalKeys, "\n"), "\n")
@@ -185,7 +189,7 @@ func expandPath(path string) string {
 }
 
 func publicKey(path string) ssh.AuthMethod {
-	key, err := ioutil.ReadFile(expandPath(path))
+	key, err := os.ReadFile(expandPath(path))
 	if err != nil {
 		panic(err)
 	}

@@ -6,7 +6,10 @@ import (
 	"github.com/gookit/color"
 )
 
-func Title(title string) {
+func Title(title string, args ...any) {
+	if len(args) > 0 {
+		title = fmt.Sprintf(title, args...)
+	}
 	fmt.Printf("%s... ", title)
 }
 

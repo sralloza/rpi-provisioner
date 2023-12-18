@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/sralloza/rpi-provisioner/pkg/networking"
 	"github.com/sralloza/rpi-provisioner/ssh"
 )
 
@@ -76,7 +77,6 @@ func ProvisionLayer1(args Layer1Args) (bool, error) {
 	conn := ssh.SSHConnection{
 		Password:  args.loginPassword,
 		UseSSHKey: false,
-		Debug:     DebugFlag,
 	}
 
 	err := conn.Connect(args.loginUser, address)
@@ -161,10 +161,7 @@ func ProvisionLayer1(args Layer1Args) (bool, error) {
 
 	if len(args.staticIP) != 0 {
 		fmt.Printf("Provisioning static ip %s...\n", args.staticIP)
-		if provisioned, err := setupNetworking(conn, interfaceArgs{
-			ip:       args.staticIP,
-			password: args.loginPassword,
-		}); err != nil {
+		if provisioned, err := networking.SetupNetworking(conn, args.staticIP, args.loginPassword); err != nil {
 			return false, err
 		} else if provisioned {
 			fmt.Println("Static IP provisioned")

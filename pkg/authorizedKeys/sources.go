@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/rs/zerolog/log"
+	"github.com/sralloza/rpi-provisioner/pkg/logging"
 )
 
 type PublicSSHKey struct {
@@ -33,7 +33,8 @@ func Get(keysUri string) ([]PublicSSHKey, error) {
 func getKeysFromJson(fileContent []byte) ([]PublicSSHKey, error) {
 	var result []PublicSSHKey
 	if err := json.Unmarshal(fileContent, &result); err != nil {
-		log.Error().Err(err).Str("data", string(fileContent)).Msg("error decoding keys json")
+		logger := logging.Get()
+		logger.Error().Err(err).Str("data", string(fileContent)).Msg("error decoding keys json")
 		return nil, fmt.Errorf("error decoding keys json: %w", err)
 	}
 

@@ -31,7 +31,7 @@ func getAuthorizedKeysFromHTTP(keysUri string) ([]PublicSSHKey, error) {
 }
 
 func patchGoogleDriveURL(input string) (string, error) {
-	r := regexp.MustCompile(`https://drive.google.com/file/d/([^/]+)/.*`)
+	r := regexp.MustCompile(`https://drive.google.com/file/d/([^/]+)`)
 	matches := r.FindStringSubmatch(input)
 	if len(matches) == 0 {
 		return "", fmt.Errorf("error parsing google drive url: %s", input)

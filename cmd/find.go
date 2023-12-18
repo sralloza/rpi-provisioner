@@ -103,7 +103,6 @@ func (f *Finder) checkSSHConnection(ipv4Addr net.IP) {
 	connection := ssh.SSHConnection{
 		Password:  f.findArgs.password,
 		UseSSHKey: f.findArgs.useSSHKey,
-		Debug:     false,
 		Timeout:   1,
 	}
 	addr := fmt.Sprintf("%v:%d", ipv4Addr, f.findArgs.port)

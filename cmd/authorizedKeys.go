@@ -28,13 +28,6 @@ func NewAuthorizedKeysCmd() *cobra.Command {
 				return errors.New("must pass --ssh-key or --password")
 			}
 
-			if len(args.keysPath) != 0 && len(args.s3Path) != 0 {
-				return errors.New("must pass one of --keys-path or --s3-path")
-			}
-			if len(args.keysPath) == 0 && len(args.s3Path) == 0 {
-				return errors.New("must pass one of --keys-path or --s3-path")
-			}
-
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, posArgs []string) error {
@@ -47,30 +40,22 @@ func NewAuthorizedKeysCmd() *cobra.Command {
 	authorizedKeysCmd.Flags().StringVar(&args.password, "password", "", "Login password")
 	authorizedKeysCmd.Flags().StringVar(&args.host, "host", "", "Server host")
 	authorizedKeysCmd.Flags().IntVar(&args.port, "port", 22, "Server SSH port")
-	authorizedKeysCmd.Flags().StringVar(&args.s3Path, "s3-path", "", "Amazon S3 path. Must match the pattern region/bucket/file")
-	authorizedKeysCmd.Flags().StringVar(&args.keysPath, "keys-path", "", "Local keys file path. You can select the public key file or a file containing multiple public keys.")
+	authorizedKeysCmd.Flags().StringVar(&args.keysUri, "keys-uri", "", "Local keys file path. You can select the public key file or a file containing multiple public keys.")
 
 	authorizedKeysCmd.MarkFlagRequired("user")
 	authorizedKeysCmd.MarkFlagRequired("host")
+	authorizedKeysCmd.MarkFlagRequired("keys-uri")
 
 	return authorizedKeysCmd
 }
 
 func updateAuthorizedKeys(args authorizedKeysArgs) error {
-	s3Region, s3Bucket, s3File, err := splitAwsPath(args.s3Path)
-	if err != nil {
-		return err
-	}
-
-	address := fmt.Sprintf("%s:%d", args.host, args.port)
-
 	conn := ssh.SSHConnection{
 		Password:  args.password,
 		UseSSHKey: args.useSSHKey,
-		Debug:     DebugFlag,
 	}
 
-	err = conn.Connect(args.user, address)
+	err := conn.Connect(args.user, fmt.Sprintf("%s:%d", args.host, args.port))
 	if err != nil {
 		return err
 	}

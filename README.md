@@ -66,9 +66,6 @@ Flags:
   -h, --help                  help for boot
       --wifi-pass string      WiFi password
       --wifi-ssid string      WiFi SSID
-
-Global Flags:
-      --debug   Enable debug
 ```
 
 ### find
@@ -89,9 +86,6 @@ Flags:
       --time              Show hosts processing time
       --timeout int       Timeout in ns to wait in ssh connections (default 1)
       --user string       User to login via ssh (default "pi")
-
-Global Flags:
-      --debug   Enable debug
 ```
 
 More info:
@@ -121,9 +115,6 @@ Flags:
       --s3-path string     Amazon S3 path. Must match the pattern region/bucket/file
       --ssh-key            Use ssh key
       --user string        Login user
-
-Global Flags:
-      --debug   Enable debug
 ```
 
 As said before, it will download the public ssh keys from AWS and update them. You can use ssh with an already valid ssh-key or the user's password. If you want to use your ssh key use the flag `--ssh-key`. It will get your private ssh key located at `~/.ssh/id_rsa` by default. Right now the private key path is not configurable. If you want to use the password to log in, use the `--password` flag.
@@ -145,9 +136,6 @@ Flags:
       --port int          Server SSH port (default 22)
       --ssh-key           Use ssh key
       --user string       Login user
-
-Global Flags:
-      --debug   Enable debug
 ```
 
 This commands just edits the dhcpd config to set an static IP Address for both eth0 and wlan0. It provisions the same IP Adress for both interfaces, but it gives priority to eth0.
@@ -179,9 +167,6 @@ Flags:
       --root-password string       Root password
       --s3-path string             Amazon S3 path. Must match the pattern region/bucket/file
       --static-ip ip               Set up the static ip for eth0 and wlan0
-
-Global Flags:
-      --debug   Enable debug
 ```
 
 ### layer2
@@ -202,9 +187,6 @@ Flags:
       --host string   Server host
       --port int      Server SSH port (default 22)
       --user string   Login user
-
-Global Flags:
-      --debug   Enable debug
 ```
 
 ## Examples of how I really use each command
