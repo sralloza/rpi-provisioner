@@ -1,19 +1,14 @@
 package ssh
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
-	"os"
 	"sort"
 	"strings"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/mitchellh/go-homedir"
+	"github.com/sralloza/rpi-provisioner/pkg/authorizedkeys"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -100,10 +95,7 @@ type UploadsshKeysArgs struct {
 	User     string
 	Password string
 	Group    string
-	S3Bucket string
-	S3File   string
-	S3Region string
-	KeysPath string
+	KeysUri  string
 }
 
 func UploadsshKeys(conn SSHConnection, args UploadsshKeysArgs) (bool, error) {
@@ -123,20 +115,16 @@ func UploadsshKeys(conn SSHConnection, args UploadsshKeysArgs) (bool, error) {
 		authorizedKeys = strings.Split(strings.Trim(fileContent, "\n"), "\n")
 	}
 
-	var newKeys []string
-	if len(args.KeysPath) != 0 {
-		newKeys, err = getKeysFromFile(args.KeysPath)
-	} else {
-		newKeys, err = getAWSSavedKeys(args.S3Bucket, args.S3File, args.S3Region)
-	}
+	newKeys, err := authorizedkeys.Get(args.KeysUri)
 	if err != nil {
-		return false, fmt.Errorf("error generating SSH auth: %w", err)
+		return false, fmt.Errorf("error getting authorized keys: %w", err)
 	}
 
-	sort.Strings(authorizedKeys)
+	for _, key := range newKeys {
+		authorizedKeys = append(authorizedKeys, key.String())
+	}
 
-	finalKeys := append(authorizedKeys, newKeys...)
-	finalKeys = removeDuplicateStr(finalKeys)
+	finalKeys := removeDuplicateStr(authorizedKeys)
 	sort.Strings(finalKeys)
 
 	newFileContent := strings.Trim(strings.Join(finalKeys, "\n"), "\n")
@@ -189,58 +177,6 @@ func UploadsshKeys(conn SSHConnection, args UploadsshKeysArgs) (bool, error) {
 	}
 
 	return true, nil
-}
-
-func getKeysFromFile(filepath string) ([]string, error) {
-	data, err := os.ReadFile(filepath)
-	if err != nil {
-		return []string{}, err
-	}
-
-	keys := strings.Split(strings.Trim(string(data), "\n"), "\n")
-	return keys, nil
-}
-
-func getAWSSavedKeys(bucket string, item string, region string) ([]string, error) {
-	file, err := os.Create("tmpfile")
-	if err != nil {
-		return []string{}, err
-	}
-
-	defer file.Close()
-
-	sess, _ := session.NewSession(&aws.Config{Region: aws.String(region)})
-
-	downloader := s3manager.NewDownloader(sess)
-	_, err = downloader.Download(file,
-		&s3.GetObjectInput{
-			Bucket: aws.String(bucket),
-			Key:    aws.String(item),
-		})
-	if err != nil {
-		return []string{}, err
-	}
-
-	data, err := ioutil.ReadFile("tmpfile")
-	if err != nil {
-		return []string{}, err
-	}
-	file.Close()
-
-	err = os.Remove("tmpfile")
-	if err != nil {
-		return []string{}, err
-	}
-
-	var result map[string]string
-	json.Unmarshal(data, &result)
-
-	var publicKeys []string
-	for _, p := range result {
-		publicKeys = append(publicKeys, p)
-	}
-
-	return publicKeys, nil
 }
 
 func expandPath(path string) string {

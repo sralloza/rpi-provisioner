@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -18,8 +17,7 @@ type Layer1Args struct {
 	rootPassword     string
 	host             string
 	port             int
-	s3Path           string
-	keysPath         string
+	keysUri          string
 	staticIP         net.IP
 }
 
@@ -34,15 +32,6 @@ func NewLayer1Cmd() *cobra.Command {
  - Disable pi login
  - [optional] static ip configuration
  `,
-		PreRunE: func(cmd *cobra.Command, posArgs []string) error {
-			if len(args.keysPath) != 0 && len(args.s3Path) != 0 {
-				return errors.New("must pass one of --keys-path or --s3-path")
-			}
-			if len(args.keysPath) == 0 && len(args.s3Path) == 0 {
-				return errors.New("must pass one of --keys-path or --s3-path")
-			}
-			return nil
-		},
 		RunE: func(cmd *cobra.Command, posArgs []string) error {
 			fmt.Println("Provisioning layer 1...")
 			provisioned, err := ProvisionLayer1(args)
@@ -71,23 +60,17 @@ func NewLayer1Cmd() *cobra.Command {
 	layer1Cmd.Flags().StringVar(&args.rootPassword, "root-password", "", "Root password")
 	layer1Cmd.Flags().StringVar(&args.host, "host", "", "Server host")
 	layer1Cmd.Flags().IntVar(&args.port, "port", 22, "Server SSH port")
-	layer1Cmd.Flags().StringVar(&args.s3Path, "s3-path", "", "Amazon S3 path. Must match the pattern region/bucket/file")
-	layer1Cmd.Flags().StringVar(&args.keysPath, "keys-path", "", "Local keys file path. You can select the public key file or a file containing multiple public keys.")
+	layer1Cmd.Flags().StringVar(&args.keysUri, "keys-uri", "", "Keys uri. Can be a AWS S3 URI, HTTP(S) or a file path.")
 	layer1Cmd.Flags().IPVar(&args.staticIP, "static-ip", nil, "Set up the static ip for eth0 and wlan0")
 
 	layer1Cmd.MarkFlagRequired("deployer-user")
 	layer1Cmd.MarkFlagRequired("deployer-password")
 	layer1Cmd.MarkFlagRequired("host")
-	layer1Cmd.MarkFlagRequired("host-name")
+	layer1Cmd.MarkFlagRequired("keysUri")
 	return layer1Cmd
 }
 
 func ProvisionLayer1(args Layer1Args) (bool, error) {
-	s3Region, s3Bucket, s3File, err := splitAwsPath(args.s3Path)
-	if err != nil {
-		return false, err
-	}
-
 	address := fmt.Sprintf("%s:%d", args.host, args.port)
 
 	conn := ssh.SSHConnection{
@@ -96,7 +79,7 @@ func ProvisionLayer1(args Layer1Args) (bool, error) {
 		Debug:     DebugFlag,
 	}
 
-	err = conn.Connect(args.loginUser, address)
+	err := conn.Connect(args.loginUser, address)
 	if err != nil {
 		if strings.Contains(err.Error(), "no supported methods remain") {
 			fmt.Println("SSH Connection error, layer 1 should be provisioned")
@@ -149,10 +132,7 @@ func ProvisionLayer1(args Layer1Args) (bool, error) {
 		User:     args.deployerUser,
 		Password: args.loginPassword,
 		Group:    args.deployerUser,
-		S3Bucket: s3Bucket,
-		S3File:   s3File,
-		S3Region: s3Region,
-		KeysPath: args.keysPath,
+		KeysUri:  args.keysUri,
 	}); err != nil {
 		return false, err
 	} else if provisioned {

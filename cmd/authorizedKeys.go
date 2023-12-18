@@ -1,18 +1,3 @@
-/*
-Copyright © 2021 NAME HERE <EMAIL ADDRESS>
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
 package cmd
 
 import (
@@ -29,8 +14,7 @@ type authorizedKeysArgs struct {
 	password  string
 	host      string
 	port      int
-	s3Path    string
-	keysPath  string
+	keysUri   string
 }
 
 func NewAuthorizedKeysCmd() *cobra.Command {
@@ -83,7 +67,7 @@ func updateAuthorizedKeys(args authorizedKeysArgs) error {
 	conn := ssh.SSHConnection{
 		Password:  args.password,
 		UseSSHKey: args.useSSHKey,
-		Debug: DebugFlag,
+		Debug:     DebugFlag,
 	}
 
 	err = conn.Connect(args.user, address)
@@ -97,10 +81,7 @@ func updateAuthorizedKeys(args authorizedKeysArgs) error {
 		User:     args.user,
 		Password: args.password,
 		Group:    args.user,
-		S3Bucket: s3Bucket,
-		S3File:   s3File,
-		S3Region: s3Region,
-		KeysPath: args.keysPath,
+		KeysUri:  args.keysUri,
 	}); err != nil {
 		return err
 	} else if provisioned {
