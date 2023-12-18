@@ -44,7 +44,6 @@ func ProvisionLayer1(args Layer1Args) (bool, error) {
 	info.Ok()
 	defer conn.Close()
 
-
 	info.Title("Creating deployer group")
 	if provisioned, err := createDeployerGroup(conn, args); err != nil {
 		info.Fail()
@@ -54,7 +53,6 @@ func ProvisionLayer1(args Layer1Args) (bool, error) {
 	} else {
 		info.Skipped()
 	}
-	fmt.Println()
 
 	info.Title("Provisioning deployer sudo access")
 	if provisioned, err := provisionSudoer(conn, args); err != nil {
@@ -65,7 +63,6 @@ func ProvisionLayer1(args Layer1Args) (bool, error) {
 	} else {
 		info.Skipped()
 	}
-	fmt.Println()
 
 	info.Title("Creating deployer user")
 	if provisioned, err := createDeployerUser(conn, args); err != nil {
@@ -76,7 +73,6 @@ func ProvisionLayer1(args Layer1Args) (bool, error) {
 	} else {
 		info.Skipped()
 	}
-	fmt.Println()
 
 	if len(args.RootPassword) > 0 {
 		info.Title("Provisioning root password")
@@ -88,7 +84,6 @@ func ProvisionLayer1(args Layer1Args) (bool, error) {
 		} else {
 			info.Skipped()
 		}
-		fmt.Println()
 	}
 
 	info.Title("Provisioning SSH keys")
@@ -105,18 +100,16 @@ func ProvisionLayer1(args Layer1Args) (bool, error) {
 	} else {
 		info.Skipped()
 	}
-	fmt.Println()
 
 	info.Title("Configuring SSHD")
 	if provisioned, err := setupsshdConfig(conn, args); err != nil {
 		info.Fail()
 		return false, err
-		} else if provisioned {
+	} else if provisioned {
 		info.Ok()
 	} else {
 		info.Skipped()
 	}
-	fmt.Println()
 
 	info.Title("Disabling loginUser login")
 	if provisioned, err := disableLoginUser(conn, args); err != nil {
@@ -127,7 +120,6 @@ func ProvisionLayer1(args Layer1Args) (bool, error) {
 	} else {
 		info.Skipped()
 	}
-	fmt.Println()
 
 	if len(args.StaticIP) != 0 {
 		info.Title("Provisioning static ip %s", args.StaticIP)
@@ -139,7 +131,6 @@ func ProvisionLayer1(args Layer1Args) (bool, error) {
 		} else {
 			info.Skipped()
 		}
-		fmt.Println()
 	}
 
 	return true, nil

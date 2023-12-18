@@ -31,13 +31,11 @@ func (b BootManager) Setup(bootPath, hostname, wifiCountry, wifiSSID, wifiPasswo
 		return err
 	}
 
-	fmt.Println()
 	err = b.firstRunScript(bootPath, hostname, wifiSSID, wifiPassword, wifiCountry)
 	if err != nil {
 		return err
 	}
 
-	fmt.Println()
 	err = b.updateCmdArgs(bootPath)
 	if err != nil {
 		return err

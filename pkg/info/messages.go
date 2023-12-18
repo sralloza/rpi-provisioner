@@ -15,12 +15,15 @@ func Title(title string, args ...any) {
 
 func Skipped() {
 	color.FgCyan.Println("SKIPPED")
+	fmt.Println()
 }
 
 func Ok() {
 	color.FgGreen.Println("OK")
+	fmt.Println()
 }
 
 func Fail() {
 	color.FgRed.Println("FAIL")
+	fmt.Println()
 }
