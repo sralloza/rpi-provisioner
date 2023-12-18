@@ -21,7 +21,7 @@ jobs:
 
       - uses: actions/setup-go@v2
         with:
-          go-version: '^1.17.1'
+          go-version: '^1.21.4'
 
       - name: Build for windows
         run: GOOS=windows GOARCH=amd64 go build -o build/$name-windows-amd64.exe
@@ -34,6 +34,9 @@ jobs:
 
       - name: Build for darwin amd64
         run: GOOS=darwin GOARCH=amd64 go build -o build/$name-darwin-amd64
+
+      - name: Build for darwin arm64
+        run: GOOS=darwin GOARCH=arm64 go build -o build/$name-darwin-arm64
 
       - name: List files
         run: ls -l build

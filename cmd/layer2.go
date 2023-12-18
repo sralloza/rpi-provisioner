@@ -30,7 +30,8 @@ func NewLayer2Cmd() *cobra.Command {
 					"  Consider rebooting the server and then execute the layer2 command again\n"+
 					"    ssh %s@%s sudo reboot\n", args.User, args.Host)
 			}
-			fmt.Println("Layer 2 provisioned")
+
+			fmt.Println("\nLayer 2 provisioned successfully")
 			return nil
 		},
 	}

@@ -2,9 +2,11 @@ package layer2
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/sralloza/rpi-provisioner/pkg/info"
+	"github.com/sralloza/rpi-provisioner/pkg/logging"
 	"github.com/sralloza/rpi-provisioner/ssh"
 )
 
@@ -66,6 +68,16 @@ func (m *layer2Manager) provisionLayer2(args Layer2Args) (error, error) {
 		info.Skipped()
 	}
 
+	info.Title("Configuring zsh plugins")
+	if installed, err := m.configureZshPlugins(); err != nil {
+		info.Fail()
+		return err, nil
+	} else if installed {
+		info.Ok()
+	} else {
+		info.Skipped()
+	}
+
 	info.Title("Installing powerlevel10k")
 	if installed, err := m.installPowerlevel10k(); err != nil {
 		info.Fail()
@@ -111,8 +123,6 @@ func (m *layer2Manager) installLibraries() error {
 		"libffi-dev",
 		"mailutils",
 		"nano",
-		// "python3-pip",
-		// "python3",
 		"tcpdump",
 		"wget",
 	}
@@ -168,37 +178,106 @@ func (m *layer2Manager) installOhMyZsh(args Layer2Args) (bool, error) {
 	return true, nil
 }
 
-func (m *layer2Manager) installPowerlevel10k() (bool, error) {
-	_, _, err := m.conn.Run("file ~/.oh-my-zsh/custom/themes/powerlevel10k -E")
+func (m *layer2Manager) configureZshPlugins() (bool, error) {
+	zshrc, _, err := m.conn.Run("cat ~/.zshrc")
 	if err != nil {
-		_, _, err := m.conn.Run("git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k")
+		return false, fmt.Errorf("error getting zshrc: %w", err)
+	}
+
+	r := regexp.MustCompile(`(?m)^plugins=\([a-z\s-]+\)`)
+
+	if !r.MatchString(zshrc) {
+		return false, fmt.Errorf("error finding plugins in zshrc")
+	}
+
+	zshSuggClone, err := m.cloneGitRepo(
+		"https://github.com/zsh-users/zsh-autosuggestions.git",
+		"${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions")
+	if err != nil {
+		return false, err
+	}
+
+	syntaxHighlClone, err := m.cloneGitRepo("https://github.com/zsh-users/zsh-syntax-highlighting.git", "${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting")
+	if err != nil {
+		return false, err
+	}
+
+	fzfPluginClone, err := m.cloneGitRepo("https://github.com/unixorn/fzf-zsh-plugin.git", "${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/fzf-zsh-plugin")
+	if err != nil {
+		return false, err
+	}
+
+	plugins := []string{
+		"fzf-zsh-plugin",
+		"git",
+		"zsh-autosuggestions",
+		"zsh-syntax-highlighting",
+	}
+	pluginsWithSpace := []string{}
+	for _, plugin := range plugins {
+		pluginsWithSpace = append(pluginsWithSpace, fmt.Sprintf(" %s", plugin))
+	}
+
+	newZshrc := r.ReplaceAllString(zshrc, fmt.Sprintf("plugins=(\n%s\n)", strings.Join(pluginsWithSpace, "\n")))
+
+	zshChanged := newZshrc != zshrc
+	if zshChanged {
+		log := logging.Get()
+		log.Info().Msg("zshrc plugins changed, updating")
+		err = m.conn.WriteToFile("/home/deployer/.zshrc", []byte(newZshrc))
 		if err != nil {
-			return false, fmt.Errorf("error cloning powerlevel10k theme: %w", err)
+			return false, fmt.Errorf("error setting plugins in zshrc: %w", err)
 		}
 	}
 
-	_, _, err = m.conn.Run("grep 'ZSH_THEME=\"powerlevel10k/powerlevel10k\"' .zshrc")
-	if err == nil {
-		return false, nil
-	}
+	return zshSuggClone || syntaxHighlClone || fzfPluginClone || zshChanged, nil
+}
 
-	_, _, err = m.conn.Run("sed -i 's/ZSH_THEME=\".*\"/ZSH_THEME=\"powerlevel10k\\/powerlevel10k\"/' ~/.zshrc")
+func (m *layer2Manager) installPowerlevel10k() (bool, error) {
+	repoCloned, err := m.cloneGitRepo(
+		"https://github.com/romkatv/powerlevel10k.git",
+		"${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k")
+
 	if err != nil {
-		return false, fmt.Errorf("error setting ZSH_THEME: %w", err)
+		return false, err
 	}
 
-	return true, nil
+	_, _, err = m.conn.Run("grep 'ZSH_THEME=\"powerlevel10k/powerlevel10k\"' .zshrc")
+	missingTheme := err != nil
+	if missingTheme {
+		_, _, err = m.conn.Run("sed -i 's/ZSH_THEME=\".*\"/ZSH_THEME=\"powerlevel10k\\/powerlevel10k\"/' ~/.zshrc")
+		if err != nil {
+			return false, fmt.Errorf("error setting ZSH_THEME: %w", err)
+		}
+	}
+
+	// Disable configuration wizard
+	_, _, err = m.conn.Run("grep \"POWERLEVEL9K_DISABLE_CONFIGURATION_WIZARD=true\" ~/.zshrc")
+	missingWizardDisable := err != nil
+	if missingWizardDisable {
+		_, _, err = m.conn.Run("echo \"POWERLEVEL9K_DISABLE_CONFIGURATION_WIZARD=true\" >> ~/.zshrc")
+		if err != nil {
+			return false, fmt.Errorf("error disabling powerlevel10k configuration wizard: %w", err)
+		}
+	}
+
+	log := logging.Get()
+	log.Info().
+		Bool("repoCloned", repoCloned).
+		Bool("missingTheme", missingTheme).
+		Bool("missingWizardDisable", missingWizardDisable).
+		Msg("powerlevel10k configured")
+	return repoCloned || missingTheme || missingWizardDisable, nil
 }
 
 func (m *layer2Manager) installDocker(args Layer2Args) (bool, error, error) {
 	_, _, err := m.conn.Run("which docker")
 	if err == nil {
+		_, _, err = m.conn.Run("docker compose")
+		if err != nil {
+			return false, nil, fmt.Errorf("docker is installed but docker compose v2 is not")
+		}
 		return false, nil, nil
-	}
-
-	_, _, err = m.conn.Run("docker compose")
-	if err != nil {
-		return false, nil, fmt.Errorf("docker is installed but docker compose v2 is not")
 	}
 
 	_, _, err = m.conn.Run("curl -fsSL https://get.docker.com -o /tmp/get-docker.sh")
@@ -211,6 +290,8 @@ func (m *layer2Manager) installDocker(args Layer2Args) (bool, error, error) {
 	var dockerInstallErr error
 	_, _, err = m.conn.Run("sudo sh /tmp/get-docker.sh")
 	if err != nil {
+		log := logging.Get()
+		log.Warn().Msgf("error executing docker installer: %v", err)
 		dockerInstallErr = fmt.Errorf("error executing docker installer: %w", err)
 	}
 
@@ -225,4 +306,16 @@ func (m *layer2Manager) installDocker(args Layer2Args) (bool, error, error) {
 	}
 
 	return true, dockerInstallErr, nil
+}
+
+func (m *layer2Manager) cloneGitRepo(repo, path string) (bool, error) {
+	_, _, err := m.conn.Run(fmt.Sprintf("file %s -E", path))
+	if err != nil {
+		_, _, err = m.conn.Run(fmt.Sprintf("git clone --depth 1 %s %s", repo, path))
+		if err != nil {
+			return false, fmt.Errorf("error cloning repo %s: %w", repo, err)
+		}
+		return true, nil
+	}
+	return false, nil
 }

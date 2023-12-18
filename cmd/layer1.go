@@ -19,7 +19,7 @@ func NewLayer1Cmd() *cobra.Command {
  - [optional] static ip configuration
  `,
 		RunE: func(cmd *cobra.Command, posArgs []string) error {
-			provisioned, err := layer1.ProvisionLayer1(args)
+			provisioned, err := layer1.NewManager().Provision(args)
 			if err != nil {
 				return err
 			}
