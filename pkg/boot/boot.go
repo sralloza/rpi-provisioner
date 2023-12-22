@@ -2,6 +2,7 @@ package boot
 
 import (
 	"bytes"
+	_ "embed"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,6 +18,9 @@ type BootArgs struct {
 	WifiSSID string
 	WifiPass string
 }
+
+//go:embed firstrun.tmpl
+var firstRunTemplate string
 
 type BootManager struct {
 }
@@ -66,8 +70,12 @@ type firstRunScriptData struct {
 func (b BootManager) firstRunScript(bootPath, hostname, wifiSSID, wifiPass, country string) error {
 	info.Title("Setting up first run script")
 
-	tmplFile := "pkg/boot/firstrun.tmpl"
-	tmpl, err := template.New(filepath.Base(tmplFile)).ParseFiles(tmplFile)
+	if firstRunTemplate == "" {
+		info.Fail()
+		return fmt.Errorf("embedded template is empty")
+	}
+
+	tmpl, err := template.New("firstrun").Parse(firstRunTemplate)
 	if err != nil {
 		info.Fail()
 		return fmt.Errorf("error loading template: %w", err)
@@ -85,7 +93,13 @@ func (b BootManager) firstRunScript(bootPath, hostname, wifiSSID, wifiPass, coun
 		return fmt.Errorf("error parsing template: %w", err)
 	}
 
-	err = os.WriteFile(filepath.Join(bootPath, "firstrun.sh"), buffer.Bytes(), 0)
+	fileBytes := buffer.Bytes()
+	if len(fileBytes) == 0 {
+		info.Fail()
+		return fmt.Errorf("rendered script is empty")
+	}
+
+	err = os.WriteFile(filepath.Join(bootPath, "firstrun.sh"), fileBytes, 0)
 	if err != nil {
 		info.Fail()
 		return fmt.Errorf("error writing first run script: %w", err)
