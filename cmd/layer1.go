@@ -19,17 +19,21 @@ func NewLayer1Cmd() *cobra.Command {
  - [optional] static ip configuration
  `,
 		RunE: func(cmd *cobra.Command, posArgs []string) error {
-			provisioned, err := layer1.NewManager().Provision(args)
+			layer1Result, err := layer1.NewManager().Provision(args)
 			if err != nil {
 				return err
 			}
 
 			fmt.Println("\nLayer 1 provisioned successfully")
-			if provisioned {
+			if layer1Result.NeedRestartForDHCPCleanup {
 				fmt.Println(
-					"\nNote: you must restart the server to suppress the security risk warning")
+					"\nWarning: you must restart the server to remove old DHCP leases")
 				fmt.Printf("  ssh %s@%s sudo reboot\n", args.DeployerUser, args.Host)
 			}
+
+			fmt.Println(
+				"\nNote: you must restart the server to suppress the security risk warning")
+			fmt.Printf("  ssh %s@%s sudo reboot\n", args.DeployerUser, args.Host)
 
 			fmt.Println("\nContinue with layer 2 or SSH into server:")
 			fmt.Printf("  ssh %s@%s\n", args.DeployerUser, args.Host)

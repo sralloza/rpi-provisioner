@@ -31,7 +31,14 @@ type layer1Manager struct {
 	conn ssh.SSHConnection
 }
 
-func (m *layer1Manager) Provision(args Layer1Args) (bool, error) {
+type Layer1Result struct {
+	NeedRestartForDHCPCleanup bool
+}
+
+func (m *layer1Manager) Provision(args Layer1Args) (Layer1Result, error) {
+	result := Layer1Result{
+		NeedRestartForDHCPCleanup: false,
+	}
 	address := fmt.Sprintf("%s:%d", args.Host, args.Port)
 
 	m.conn = ssh.SSHConnection{
@@ -45,10 +52,10 @@ func (m *layer1Manager) Provision(args Layer1Args) (bool, error) {
 		if strings.Contains(err.Error(), "no supported methods remain") {
 			info.Skipped()
 			fmt.Println("SSH Connection error, layer 1 should be provisioned")
-			return false, nil
+			return result, nil
 		}
 		info.Fail()
-		return false, fmt.Errorf("SSH connection error: %w", err)
+		return result, fmt.Errorf("SSH connection error: %w", err)
 	}
 	info.Ok()
 	defer m.conn.Close()
@@ -56,11 +63,15 @@ func (m *layer1Manager) Provision(args Layer1Args) (bool, error) {
 	return m.provisionLayer1(args)
 }
 
-func (m *layer1Manager) provisionLayer1(args Layer1Args) (bool, error) {
+func (m *layer1Manager) provisionLayer1(args Layer1Args) (Layer1Result, error) {
+	result := Layer1Result{
+		NeedRestartForDHCPCleanup: false,
+	}
+
 	info.Title("Creating deployer group")
 	if provisioned, err := m.createDeployerGroup(args); err != nil {
 		info.Fail()
-		return false, err
+		return result, err
 	} else if provisioned {
 		info.Ok()
 	} else {
@@ -70,7 +81,7 @@ func (m *layer1Manager) provisionLayer1(args Layer1Args) (bool, error) {
 	info.Title("Provisioning deployer sudo access")
 	if provisioned, err := m.provisionSudoer(args); err != nil {
 		info.Fail()
-		return false, err
+		return result, err
 	} else if provisioned {
 		info.Ok()
 	} else {
@@ -80,7 +91,7 @@ func (m *layer1Manager) provisionLayer1(args Layer1Args) (bool, error) {
 	info.Title("Creating deployer user")
 	if provisioned, err := m.createDeployerUser(args); err != nil {
 		info.Fail()
-		return false, err
+		return result, err
 	} else if provisioned {
 		info.Ok()
 	} else {
@@ -91,7 +102,7 @@ func (m *layer1Manager) provisionLayer1(args Layer1Args) (bool, error) {
 		info.Title("Provisioning root password")
 		if provisioned, err := m.setRootPassword(args); err != nil {
 			info.Fail()
-			return false, err
+			return result, err
 		} else if provisioned {
 			info.Ok()
 		} else {
@@ -107,7 +118,7 @@ func (m *layer1Manager) provisionLayer1(args Layer1Args) (bool, error) {
 		KeysUri:  args.KeysUri,
 	}); err != nil {
 		info.Fail()
-		return false, err
+		return result, err
 	} else if provisioned {
 		info.Ok()
 	} else {
@@ -117,7 +128,7 @@ func (m *layer1Manager) provisionLayer1(args Layer1Args) (bool, error) {
 	info.Title("Configuring SSHD")
 	if provisioned, err := m.setupsshdConfig(args); err != nil {
 		info.Fail()
-		return false, err
+		return result, err
 	} else if provisioned {
 		info.Ok()
 	} else {
@@ -127,7 +138,7 @@ func (m *layer1Manager) provisionLayer1(args Layer1Args) (bool, error) {
 	info.Title("Disabling loginUser login")
 	if provisioned, err := m.disableLoginUser(args); err != nil {
 		info.Fail()
-		return false, err
+		return result, err
 	} else if provisioned {
 		info.Ok()
 	} else {
@@ -136,17 +147,19 @@ func (m *layer1Manager) provisionLayer1(args Layer1Args) (bool, error) {
 
 	if len(args.IpAddress) > 0 {
 		info.Title("Provisioning static IP %s", args.IpAddress)
-		if provisioned, err := networking.SetupNetworking(m.conn, args.IpAddress, args.LoginPassword, args.Host); err != nil {
+		networkResult, err := networking.SetupNetworking(m.conn, args.IpAddress, args.LoginPassword, args.Host)
+		result.NeedRestartForDHCPCleanup = networkResult.NeedRestartForDHCPCleanup
+		if err != nil {
 			info.Fail()
-			return false, err
-		} else if provisioned {
+			return result, err
+		} else if networkResult.Provisioned {
 			info.Ok()
 		} else {
 			info.Skipped()
 		}
 	}
 
-	return true, nil
+	return result, nil
 }
 
 func (m *layer1Manager) createDeployerGroup(args Layer1Args) (bool, error) {
