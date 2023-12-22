@@ -18,10 +18,12 @@ func NewLayer2Cmd() *cobra.Command {
 - Install some useful libraries
 - Install zsh
 - Install oh-my-zsh
+- Install tailsafe
+- Configure tailsafe (if auth-key is provided)
 - Install docker
 `,
 		RunE: func(cmd *cobra.Command, posArgs []string) error {
-			err, dockerInstallErr := layer2.NewManager().Provision(args)
+			needManualTsLogin, dockerInstallErr, err := layer2.NewManager().Provision(args)
 			if err != nil {
 				return err
 			}
@@ -29,6 +31,14 @@ func NewLayer2Cmd() *cobra.Command {
 				fmt.Printf("\nDocker instalation failed, will probably be fixed with a reboot\n"+
 					"  Consider rebooting the server and then execute the layer2 command again\n"+
 					"    ssh %s@%s sudo reboot\n", args.User, args.Host)
+			}
+
+			if needManualTsLogin {
+				fmt.Printf("\nTailscale was not started because it's not logged in.\n"+
+					"  To start the service, run the command again with the --ts-auth-key flag "+
+					"(+Info: https://login.tailscale.com/admin/settings/keys)\n"+
+					"  Or you can login manually and start the server:\n"+
+					"    ssh %s@%s sudo tailscale up\n", args.User, args.Host)
 			}
 
 			fmt.Println("\nLayer 2 provisioned successfully")
@@ -39,6 +49,7 @@ func NewLayer2Cmd() *cobra.Command {
 	layer2Cmd.Flags().StringVar(&args.User, "user", "", "Login user")
 	layer2Cmd.Flags().StringVar(&args.Host, "host", "", "Server host")
 	layer2Cmd.Flags().IntVar(&args.Port, "port", 22, "Server SSH port")
+	layer2Cmd.Flags().StringVar(&args.TailscaleAuthKey, "ts-auth-key", "", "Tailscale auth key")
 
 	layer2Cmd.MarkFlagRequired("user")
 	layer2Cmd.MarkFlagRequired("host")

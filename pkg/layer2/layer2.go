@@ -5,26 +5,32 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/rs/zerolog"
 	"github.com/sralloza/rpi-provisioner/pkg/info"
 	"github.com/sralloza/rpi-provisioner/pkg/logging"
 	"github.com/sralloza/rpi-provisioner/ssh"
 )
 
 type Layer2Args struct {
-	User string
-	Host string
-	Port int
+	User             string
+	Host             string
+	Port             int
+	TailscaleAuthKey string
 }
 
 func NewManager() *layer2Manager {
-	return &layer2Manager{}
+	return &layer2Manager{
+		log: logging.Get(),
+	}
 }
 
 type layer2Manager struct {
 	conn ssh.SSHConnection
+	log  *zerolog.Logger
 }
 
-func (m *layer2Manager) Provision(args Layer2Args) (error, error) {
+// Returns (needManualTailscaleLogin, dockerInstallErr, error)
+func (m *layer2Manager) Provision(args Layer2Args) (bool, error, error) {
 	address := fmt.Sprintf("%s:%d", args.Host, args.Port)
 
 	info.Title("Connecting to server")
@@ -32,7 +38,7 @@ func (m *layer2Manager) Provision(args Layer2Args) (error, error) {
 	err := m.conn.Connect(args.User, address)
 	if err != nil {
 		info.Fail()
-		return err, nil
+		return false, nil, err
 	}
 	info.Ok()
 	defer m.conn.Close()
@@ -40,18 +46,19 @@ func (m *layer2Manager) Provision(args Layer2Args) (error, error) {
 	return m.provisionLayer2(args)
 }
 
-func (m *layer2Manager) provisionLayer2(args Layer2Args) (error, error) {
+// Returns (needManualTailscaleLogin, dockerInstallErr, error)
+func (m *layer2Manager) provisionLayer2(args Layer2Args) (bool, error, error) {
 	info.Title("Updating and upgrading packages")
 	if err := m.installLibraries(); err != nil {
 		info.Fail()
-		return err, nil
+		return false, nil, err
 	}
 	info.Ok()
 
 	info.Title("Installing zsh")
 	if installed, err := m.installZsh(args); err != nil {
 		info.Fail()
-		return err, nil
+		return false, nil, err
 	} else if installed {
 		info.Ok()
 	} else {
@@ -61,7 +68,7 @@ func (m *layer2Manager) provisionLayer2(args Layer2Args) (error, error) {
 	info.Title("Installing oh-my-zsh")
 	if installed, err := m.installOhMyZsh(args); err != nil {
 		info.Fail()
-		return err, nil
+		return false, nil, err
 	} else if installed {
 		info.Ok()
 	} else {
@@ -71,7 +78,7 @@ func (m *layer2Manager) provisionLayer2(args Layer2Args) (error, error) {
 	info.Title("Configuring zsh plugins")
 	if installed, err := m.configureZshPlugins(); err != nil {
 		info.Fail()
-		return err, nil
+		return false, nil, err
 	} else if installed {
 		info.Ok()
 	} else {
@@ -81,8 +88,29 @@ func (m *layer2Manager) provisionLayer2(args Layer2Args) (error, error) {
 	info.Title("Installing powerlevel10k")
 	if installed, err := m.installPowerlevel10k(); err != nil {
 		info.Fail()
-		return err, nil
+		return false, nil, err
 	} else if installed {
+		info.Ok()
+	} else {
+		info.Skipped()
+	}
+
+	info.Title("Installing tailscale")
+	if installed, err := m.installTailscale(); err != nil {
+		info.Fail()
+		return false, nil, err
+	} else if installed {
+		info.Ok()
+	} else {
+		info.Skipped()
+	}
+
+	info.Title("Starting and setting up tailscale")
+	tailscaleStarted, needManualLogin, err := m.startAndSetupTailscale(args.TailscaleAuthKey)
+	if err != nil {
+		info.Fail()
+		return needManualLogin, nil, err
+	} else if tailscaleStarted {
 		info.Ok()
 	} else {
 		info.Skipped()
@@ -92,14 +120,13 @@ func (m *layer2Manager) provisionLayer2(args Layer2Args) (error, error) {
 	installed, dockerInstallErr, err := m.installDocker(args)
 	if err != nil {
 		info.Fail()
-		return err, dockerInstallErr
+		return false, dockerInstallErr, err
 	} else if installed {
 		info.Ok()
 	} else {
 		info.Skipped()
 	}
-
-	return nil, dockerInstallErr
+	return needManualLogin, dockerInstallErr, nil
 }
 
 func (m *layer2Manager) installLibraries() error {
@@ -130,6 +157,16 @@ func (m *layer2Manager) installLibraries() error {
 	_, _, err = m.conn.RunSudo(installCmd)
 	if err != nil {
 		return fmt.Errorf("error installing needed libraries: %w", err)
+	}
+
+	// Bat in debian is called 'batcat'
+	// https://github.com/sharkdp/bat/issues/982
+	_, _, err = m.conn.Run("which bat")
+	if err != nil {
+		_, _, err = m.conn.RunSudo("ln -s /usr/bin/batcat /usr/bin/bat")
+		if err != nil {
+			return fmt.Errorf("error creating bat symlink: %w", err)
+		}
 	}
 
 	return nil
@@ -222,8 +259,7 @@ func (m *layer2Manager) configureZshPlugins() (bool, error) {
 
 	zshChanged := newZshrc != zshrc
 	if zshChanged {
-		log := logging.Get()
-		log.Info().Msg("zshrc plugins changed, updating")
+		m.log.Info().Msg("zshrc plugins changed, updating")
 		err = m.conn.WriteToFile("/home/deployer/.zshrc", []byte(newZshrc))
 		if err != nil {
 			return false, fmt.Errorf("error setting plugins in zshrc: %w", err)
@@ -261,8 +297,7 @@ func (m *layer2Manager) installPowerlevel10k() (bool, error) {
 		}
 	}
 
-	log := logging.Get()
-	log.Info().
+	m.log.Info().
 		Bool("repoCloned", repoCloned).
 		Bool("missingTheme", missingTheme).
 		Bool("missingWizardDisable", missingWizardDisable).
@@ -290,8 +325,7 @@ func (m *layer2Manager) installDocker(args Layer2Args) (bool, error, error) {
 	var dockerInstallErr error
 	_, _, err = m.conn.Run("sudo sh /tmp/get-docker.sh")
 	if err != nil {
-		log := logging.Get()
-		log.Warn().Msgf("error executing docker installer: %v", err)
+		m.log.Warn().Msgf("error executing docker installer: %v", err)
 		dockerInstallErr = fmt.Errorf("error executing docker installer: %w", err)
 	}
 
@@ -306,6 +340,63 @@ func (m *layer2Manager) installDocker(args Layer2Args) (bool, error, error) {
 	}
 
 	return true, dockerInstallErr, nil
+}
+
+func (m *layer2Manager) installTailscale() (bool, error) {
+	_, _, err := m.conn.Run("which tailscale")
+	if err == nil {
+		return false, nil
+	}
+
+	_, _, err = m.conn.Run("curl -fsSL https://tailscale.com/install.sh -o /tmp/install-tailscale.sh")
+	if err != nil {
+		return false, fmt.Errorf("error downloading tailscale installer: %w", err)
+	}
+
+	_, _, err = m.conn.Run("sh /tmp/install-tailscale.sh")
+	if err != nil {
+		return false, fmt.Errorf("error executing tailscale installer: %w", err)
+	}
+
+	_, _, err = m.conn.Run("rm /tmp/install-tailscale.sh")
+	if err != nil {
+		return false, fmt.Errorf("error removing tailscale installer: %w", err)
+	}
+
+	return true, nil
+}
+
+// Starts tailscale and logs in if needed
+// Returns (tailscaleStarted, needManualLogin, error)
+func (m *layer2Manager) startAndSetupTailscale(authKey string) (bool, bool, error) {
+	status, err := m.getTailScaleStatus()
+	if err != nil {
+		return false, false, err
+	}
+	m.log.Debug().Str("status", string(status)).Msg("tailscale status")
+
+	if status == tailscaleUp {
+		m.log.Debug().Msg("tailscale is already running")
+		return false, false, nil
+	}
+
+	if status == tailscaleLoggedOut {
+		m.log.Debug().Msg("tailscale is logged out, logging in")
+		if authKey == "" {
+			m.log.Debug().Msg("tailscale auth key not provided, will not login")
+			return false, true, nil
+		}
+
+		if err := m.tailscaleLogin(authKey); err != nil {
+			return false, false, fmt.Errorf("error logging in to tailscale: %w", err)
+		}
+	}
+
+	if err := m.tailscaleUp(); err != nil {
+		return false, false, fmt.Errorf("error starting tailscale: %w", err)
+	}
+
+	return true, false, nil
 }
 
 func (m *layer2Manager) cloneGitRepo(repo, path string) (bool, error) {

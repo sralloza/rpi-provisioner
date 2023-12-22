@@ -96,7 +96,7 @@ func (b BootManager) firstRunScript(bootPath, hostname, wifiSSID, wifiPass, coun
 }
 
 func (b BootManager) updateCmdArgs(bootPath string) error {
-	info.Title("Updating cmdline.txt")
+	info.Title("Enabling firstrun script")
 
 	cmdLinePath := filepath.Join(bootPath, "cmdline.txt")
 	content, err := os.ReadFile(cmdLinePath)

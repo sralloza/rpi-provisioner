@@ -8,6 +8,7 @@ import (
 
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/sftp"
+	"github.com/rs/zerolog"
 	"github.com/sralloza/rpi-provisioner/pkg/logging"
 	"golang.org/x/crypto/ssh"
 )
@@ -18,9 +19,11 @@ type SSHConnection struct {
 	Password  string
 	UseSSHKey bool
 	Timeout   int64
+	log       *zerolog.Logger
 }
 
 func (c *SSHConnection) Connect(user string, address string) error {
+	c.log = logging.Get()
 	var auth []ssh.AuthMethod
 
 	if c.UseSSHKey {
@@ -42,16 +45,12 @@ func (c *SSHConnection) Connect(user string, address string) error {
 	return nil
 }
 
-func (c SSHConnection) Run(cmd string) (string, string, error) {
-	return runCommand(cmd, c.conn)
-}
-
 func (c SSHConnection) RunSudo(cmd string) (string, string, error) {
-	return c.Run(basicSudoStdin(cmd, ""))
+	return c.Run(c.basicSudoStdin(cmd, ""))
 }
 
 func (c SSHConnection) RunSudoPassword(cmd string, password string) (string, string, error) {
-	return c.Run(basicSudoStdin(cmd, password))
+	return c.Run(c.basicSudoStdin(cmd, password))
 }
 
 func (c SSHConnection) Close() {
@@ -82,23 +81,27 @@ func (c SSHConnection) WriteToFile(dstPath string, content []byte) error {
 	return nil
 }
 
-func basicSudoStdin(cmd string, password string) string {
+func (c SSHConnection) basicSudoStdin(cmd string, password string) string {
+	if len(password) == 0 {
+		return fmt.Sprintf("sudo bash -c '%s'", cmd)
+	}
 	return fmt.Sprintf("echo %s | sudo -S bash -c '%s'", password, cmd)
 }
 
-func runCommand(cmd string, conn *ssh.Client) (string, string, error) {
-	sess, err := conn.NewSession()
+func (c SSHConnection) Run(cmd string) (string, string, error) {
+	c.log.Debug().Str("cmd", cmd).Msg("Running command via ssh")
+	sess, err := c.conn.NewSession()
 	if err != nil {
-		panic(err)
+		return "", "", fmt.Errorf("could not stablish ssh session: %w", err)
 	}
 	defer sess.Close()
 	sessStdOut, err := sess.StdoutPipe()
 	if err != nil {
-		panic(err)
+		return "", "", fmt.Errorf("could not get stdout pipe: %w", err)
 	}
 	sessStderr, err := sess.StderrPipe()
 	if err != nil {
-		panic(err)
+		return "", "", fmt.Errorf("could not get stderr pipe: %w", err)
 	}
 	err = sess.Run(cmd)
 
@@ -107,12 +110,12 @@ func runCommand(cmd string, conn *ssh.Client) (string, string, error) {
 	bufErr := new(strings.Builder)
 	io.Copy(bufErr, sessStderr)
 
-	logger := logging.Get()
-	logger.Debug().
+	c.log.Debug().
 		Str("cmd", cmd).
 		Str("stdout", bufOut.String()).
 		Str("stderr", bufErr.String()).
-		Msg("Running command via ssh")
+		Err(err).
+		Msg("Command executed via ssh")
 
 	return bufOut.String(), bufErr.String(), err
 }

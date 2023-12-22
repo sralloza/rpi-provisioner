@@ -27,10 +27,11 @@ func NewNetworkingCmd() *cobra.Command {
 	networkingCmd.Flags().StringVar(&args.Password, "password", "", "Login password")
 	networkingCmd.Flags().StringVar(&args.Host, "host", "", "Server host")
 	networkingCmd.Flags().IntVar(&args.Port, "port", 22, "Server SSH port")
-	networkingCmd.Flags().IPVar(&args.Ip, "ip", nil, "New IP")
+	networkingCmd.Flags().IPVar(&args.PrimaryIP, "primary-ip", nil, "Static IP of the primary interface (eth0 if it's connected, wlan0 otherwise)")
+	networkingCmd.Flags().IPVar(&args.SecondaryIP, "secondary-ip", nil, "Static IP of the secondary interface (wlan0)")
 
 	networkingCmd.MarkFlagRequired("user")
 	networkingCmd.MarkFlagRequired("host")
-	networkingCmd.MarkFlagRequired("ip")
+	networkingCmd.MarkFlagRequired("primary-ip")
 	return networkingCmd
 }

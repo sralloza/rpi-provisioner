@@ -17,7 +17,6 @@ type FindArgs struct {
 	password  string
 	useSSHKey bool
 	live      bool
-	time      bool
 	port      int
 	timeout   int
 }
@@ -41,7 +40,6 @@ func NewFindCommand() *cobra.Command {
 	findCmd.Flags().BoolVar(&args.useSSHKey, "ssh-key", false, "Use SSH key")
 	findCmd.Flags().IntVar(&args.port, "port", 22, "Port to connect via ssh")
 	findCmd.Flags().BoolVar(&args.live, "live", false, "Print valid hosts right after found")
-	findCmd.Flags().BoolVar(&args.time, "time", false, "Show hosts processing time")
 	findCmd.Flags().IntVar(&args.timeout, "timeout", 1, "Timeout in ns to wait in ssh connections")
 	return findCmd
 }
@@ -70,12 +68,9 @@ func findHost(args FindArgs) error {
 	start := time.Now()
 	finder := Finder{totalIPs: ipv4List, findArgs: args}
 	validIPs := finder.findValidSSHHosts()
-	if args.time {
-		elapsed := time.Since(start)
-		fmt.Printf("Done (%s)\n", elapsed)
-	} else {
-		fmt.Println("Done")
-	}
+
+	elapsed := time.Since(start)
+	fmt.Printf("Done (%s)\n", elapsed)
 
 	fmt.Printf("Valid ips: %v\n", validIPs)
 	return nil

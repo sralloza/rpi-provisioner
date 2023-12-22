@@ -19,6 +19,10 @@ func NewLayer1Cmd() *cobra.Command {
  - [optional] static ip configuration
  `,
 		RunE: func(cmd *cobra.Command, posArgs []string) error {
+			if args.PrimaryIP == nil && args.SecondaryIP != nil {
+				return fmt.Errorf("secondary ip cannot be set without primary ip")
+			}
+
 			provisioned, err := layer1.NewManager().Provision(args)
 			if err != nil {
 				return err
@@ -27,8 +31,7 @@ func NewLayer1Cmd() *cobra.Command {
 			fmt.Println("\nLayer 1 provisioned successfully")
 			if provisioned {
 				fmt.Println(
-					"\nNote: you must restart the server to apply the hostname change " +
-						"and suppress the security risk warning")
+					"\nNote: you must restart the server to suppress the security risk warning")
 				fmt.Printf("  ssh %s@%s sudo reboot\n", args.DeployerUser, args.Host)
 			}
 
@@ -46,7 +49,8 @@ func NewLayer1Cmd() *cobra.Command {
 	layer1Cmd.Flags().StringVar(&args.Host, "host", "", "Server host")
 	layer1Cmd.Flags().IntVar(&args.Port, "port", 22, "Server SSH port")
 	layer1Cmd.Flags().StringVar(&args.KeysUri, "keys-uri", "", "Keys uri. Can be a AWS S3 URI, HTTP(S) or a file path.")
-	layer1Cmd.Flags().IPVar(&args.StaticIP, "static-ip", nil, "Set up the static ip for eth0 and wlan0")
+	layer1Cmd.Flags().IPVar(&args.PrimaryIP, "primary-ip", nil, "Static IP of the primary interface (eth0 if it's connected, wlan0 otherwise)")
+	layer1Cmd.Flags().IPVar(&args.SecondaryIP, "secondary-ip", nil, "Static IP of the secondary interface (wlan0)")
 
 	layer1Cmd.MarkFlagRequired("deployer-user")
 	layer1Cmd.MarkFlagRequired("deployer-password")
