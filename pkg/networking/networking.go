@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strings"
 
+	"slices"
+
 	"github.com/rs/zerolog"
 	"github.com/sralloza/rpi-provisioner/pkg/info"
 	"github.com/sralloza/rpi-provisioner/pkg/logging"
@@ -44,36 +46,35 @@ func SetupNetworking(conn ssh.SSHConnection, primaryIP net.IP, password, host st
 	return manager.setupNetworking(primaryIP, password)
 }
 
-func (n *networkingManager) Setup(args NetworkingArgs) error {
+func (n *networkingManager) Setup(args NetworkingArgs) (NetworkProvisionResult, error) {
+	result := NetworkProvisionResult{
+		Provisioned:               false,
+		NeedRestartForDHCPCleanup: false,
+	}
+
 	if !args.UseSSHKey && len(args.Password) == 0 {
-		return errors.New("must pass --ssh-key or --password")
+		return result, errors.New("must pass --ssh-key or --password")
 	}
 
 	err := n.connect(args.User, args.Password, args.Host, args.Port, args.UseSSHKey)
 	if err != nil {
-		return err
+		return result, err
 	}
 	defer n.conn.Close()
 
 	info.Title("Provisioning static IP %s", args.IpAddress)
 
-	result, err := n.setupNetworking(args.IpAddress, args.Password)
+	result, err = n.setupNetworking(args.IpAddress, args.Password)
 	if err != nil {
 		info.Fail()
-		return err
+		return result, err
 	} else if result.Provisioned {
 		info.Ok()
 	} else {
 		info.Skipped()
 	}
 
-	if result.NeedRestartForDHCPCleanup {
-		fmt.Println(
-			"\nWarning: you must restart the server to remove old DHCP leases")
-		fmt.Printf("  ssh %s@%s sudo reboot\n", args.User, args.Host)
-	}
-
-	return nil
+	return result, nil
 }
 
 func (n *networkingManager) connect(user, password, host string, port int, useSSHKey bool) error {
@@ -213,9 +214,6 @@ func (n *networkingManager) deleteDhcpIps(password, iface string, realIp net.IP)
 	}
 
 	n.log.Debug().Str("iface", iface).Strs("dhcpIps", dhcpIps).Msgf("Found %d DHCP IPs", len(dhcpIps))
-	if len(dhcpIps) == 0 {
-		return true, nil
-	}
 
 	for _, ip := range dhcpIps {
 		cmd := fmt.Sprintf("ip addr del %s/32 dev %s", ip, iface)
@@ -228,6 +226,24 @@ func (n *networkingManager) deleteDhcpIps(password, iface string, realIp net.IP)
 			return false, fmt.Errorf(
 				"error deleting IP %s for interface %s [%w]: %s", ip, iface, err, stderr)
 		}
+	}
+
+	// Detect if there is more than 1 IP in total. Example:
+	// "192.168.0.0/24 dev eth0 proto kernel scope link src 192.168.0.158 metric 100 "
+
+	r := regexp.MustCompile(`src (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) metric`)
+	kernelScopeIps := []string{}
+	matches := r.FindAllStringSubmatch(routes, -1)
+	for _, match := range matches {
+		ipAddress := match[1]
+		if !slices.Contains(dhcpIps, ipAddress) {
+			kernelScopeIps = append(kernelScopeIps, ipAddress)
+		}
+	}
+
+	n.log.Debug().Str("iface", iface).Strs("kernelScopeIps", kernelScopeIps).Msgf("Found %d kernel scope IPs", len(kernelScopeIps))
+	if len(kernelScopeIps) > 1 {
+		return false, fmt.Errorf("error deleting old DHCP IPs, try rebooting the device")
 	}
 
 	return true, nil

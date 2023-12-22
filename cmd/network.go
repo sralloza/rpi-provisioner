@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 	"github.com/sralloza/rpi-provisioner/pkg/networking"
 )
@@ -14,8 +16,15 @@ func NewNetworkingCmd() *cobra.Command {
 		Long:  `Set up static ip for eth0 and wlan0.`,
 		RunE: func(cmd *cobra.Command, posArgs []string) error {
 			networkManager := networking.NewNetworkingManager()
-			if err := networkManager.Setup(args); err != nil {
+			result, err := networkManager.Setup(args)
+			if err != nil {
 				return err
+			}
+
+			if result.NeedRestartForDHCPCleanup {
+				fmt.Printf("\nWarning: you must restart the server to remove old DHCP leases\n"+
+					"  Consider rebooting the server and then execute the network command again\n"+
+					"    ssh %s@%s sudo reboot\n", args.User, args.IpAddress.String())
 			}
 
 			return nil

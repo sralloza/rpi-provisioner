@@ -23,17 +23,17 @@ func NewLayer2Cmd() *cobra.Command {
 - Install docker
 `,
 		RunE: func(cmd *cobra.Command, posArgs []string) error {
-			needManualTsLogin, dockerInstallErr, err := layer2.NewManager().Provision(args)
+			layer2Result, err := layer2.NewManager().Provision(args)
 			if err != nil {
 				return err
 			}
-			if dockerInstallErr != nil {
+			if layer2Result.DockerInstallErr != nil {
 				fmt.Printf("\nDocker instalation failed, will probably be fixed with a reboot\n"+
 					"  Consider rebooting the server and then execute the layer2 command again\n"+
 					"    ssh %s@%s sudo reboot\n", args.User, args.Host)
 			}
 
-			if needManualTsLogin {
+			if layer2Result.NeedManualTailscaleLogin {
 				fmt.Printf("\nTailscale was not started because it's not logged in.\n"+
 					"  To start the service, run the command again with the --ts-auth-key flag "+
 					"(+Info: https://login.tailscale.com/admin/settings/keys)\n"+

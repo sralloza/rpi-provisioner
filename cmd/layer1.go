@@ -26,9 +26,13 @@ func NewLayer1Cmd() *cobra.Command {
 
 			fmt.Println("\nLayer 1 provisioned successfully")
 			if layer1Result.NeedRestartForDHCPCleanup {
-				fmt.Println(
-					"\nWarning: you must restart the server to remove old DHCP leases")
-				fmt.Printf("  ssh %s@%s sudo reboot\n", args.DeployerUser, args.Host)
+				newHost := args.Host
+				if args.IpAddress != nil {
+					newHost = args.IpAddress.String()
+				}
+				fmt.Printf("\nWarning: you must restart the server to remove old DHCP leases\n"+
+					"  Consider rebooting the server and then execute the network command again\n"+
+					"    ssh %s@%s sudo reboot\n", args.DeployerUser, newHost)
 			}
 
 			fmt.Println(

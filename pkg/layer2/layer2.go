@@ -29,8 +29,17 @@ type layer2Manager struct {
 	log  *zerolog.Logger
 }
 
+type Layer2Result struct {
+	NeedManualTailscaleLogin bool
+	DockerInstallErr         error
+}
+
 // Returns (needManualTailscaleLogin, dockerInstallErr, error)
-func (m *layer2Manager) Provision(args Layer2Args) (bool, error, error) {
+func (m *layer2Manager) Provision(args Layer2Args) (Layer2Result, error) {
+	result := Layer2Result{
+		NeedManualTailscaleLogin: false,
+		DockerInstallErr:         nil,
+	}
 	address := fmt.Sprintf("%s:%d", args.Host, args.Port)
 
 	info.Title("Connecting to server")
@@ -38,7 +47,7 @@ func (m *layer2Manager) Provision(args Layer2Args) (bool, error, error) {
 	err := m.conn.Connect(args.User, address)
 	if err != nil {
 		info.Fail()
-		return false, nil, err
+		return result, err
 	}
 	info.Ok()
 	defer m.conn.Close()
@@ -47,18 +56,23 @@ func (m *layer2Manager) Provision(args Layer2Args) (bool, error, error) {
 }
 
 // Returns (needManualTailscaleLogin, dockerInstallErr, error)
-func (m *layer2Manager) provisionLayer2(args Layer2Args) (bool, error, error) {
+func (m *layer2Manager) provisionLayer2(args Layer2Args) (Layer2Result, error) {
+	result := Layer2Result{
+		NeedManualTailscaleLogin: false,
+		DockerInstallErr:         nil,
+	}
+
 	info.Title("Updating and upgrading packages")
 	if err := m.installLibraries(); err != nil {
 		info.Fail()
-		return false, nil, err
+		return result, err
 	}
 	info.Ok()
 
 	info.Title("Installing zsh")
 	if installed, err := m.installZsh(args); err != nil {
 		info.Fail()
-		return false, nil, err
+		return result, err
 	} else if installed {
 		info.Ok()
 	} else {
@@ -68,7 +82,7 @@ func (m *layer2Manager) provisionLayer2(args Layer2Args) (bool, error, error) {
 	info.Title("Installing oh-my-zsh")
 	if installed, err := m.installOhMyZsh(args); err != nil {
 		info.Fail()
-		return false, nil, err
+		return result, err
 	} else if installed {
 		info.Ok()
 	} else {
@@ -78,7 +92,7 @@ func (m *layer2Manager) provisionLayer2(args Layer2Args) (bool, error, error) {
 	info.Title("Configuring zsh plugins")
 	if installed, err := m.configureZshPlugins(); err != nil {
 		info.Fail()
-		return false, nil, err
+		return result, err
 	} else if installed {
 		info.Ok()
 	} else {
@@ -88,7 +102,7 @@ func (m *layer2Manager) provisionLayer2(args Layer2Args) (bool, error, error) {
 	info.Title("Installing powerlevel10k")
 	if installed, err := m.installPowerlevel10k(); err != nil {
 		info.Fail()
-		return false, nil, err
+		return result, err
 	} else if installed {
 		info.Ok()
 	} else {
@@ -98,7 +112,7 @@ func (m *layer2Manager) provisionLayer2(args Layer2Args) (bool, error, error) {
 	info.Title("Installing tailscale")
 	if installed, err := m.installTailscale(); err != nil {
 		info.Fail()
-		return false, nil, err
+		return result, err
 	} else if installed {
 		info.Ok()
 	} else {
@@ -109,7 +123,8 @@ func (m *layer2Manager) provisionLayer2(args Layer2Args) (bool, error, error) {
 	tailscaleStarted, needManualLogin, err := m.startAndSetupTailscale(args.TailscaleAuthKey)
 	if err != nil {
 		info.Fail()
-		return needManualLogin, nil, err
+		result.NeedManualTailscaleLogin = needManualLogin
+		return result, err
 	} else if tailscaleStarted {
 		info.Ok()
 	} else {
@@ -120,13 +135,14 @@ func (m *layer2Manager) provisionLayer2(args Layer2Args) (bool, error, error) {
 	installed, dockerInstallErr, err := m.installDocker(args)
 	if err != nil {
 		info.Fail()
-		return false, dockerInstallErr, err
+		result.DockerInstallErr = dockerInstallErr
+		return result, err
 	} else if installed {
 		info.Ok()
 	} else {
 		info.Skipped()
 	}
-	return needManualLogin, dockerInstallErr, nil
+	return result, nil
 }
 
 func (m *layer2Manager) installLibraries() error {
