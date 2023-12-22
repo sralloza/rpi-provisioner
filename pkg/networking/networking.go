@@ -14,13 +14,12 @@ import (
 )
 
 type NetworkingArgs struct {
-	UseSSHKey   bool
-	User        string
-	Password    string
-	Host        string
-	Port        int
-	PrimaryIP   net.IP
-	SecondaryIP net.IP
+	UseSSHKey bool
+	User      string
+	Password  string
+	Host      string
+	Port      int
+	IpAddress net.IP
 }
 
 func NewNetworkingManager() *networkingManager {
@@ -34,10 +33,10 @@ type networkingManager struct {
 	log  *zerolog.Logger
 }
 
-func SetupNetworking(conn ssh.SSHConnection, primaryIP, secondaryIP net.IP, password, host string) (bool, error) {
+func SetupNetworking(conn ssh.SSHConnection, primaryIP net.IP, password, host string) (bool, error) {
 	manager := NewNetworkingManager()
 	manager.conn = conn
-	return manager.setupNetworking(primaryIP, secondaryIP, password, host)
+	return manager.setupNetworking(primaryIP, password)
 }
 
 func (n *networkingManager) Setup(args NetworkingArgs) error {
@@ -51,13 +50,9 @@ func (n *networkingManager) Setup(args NetworkingArgs) error {
 	}
 	defer n.conn.Close()
 
-	if len(args.SecondaryIP) > 0 {
-		info.Title("Provisioning static IPs %s and %s", args.PrimaryIP, args.SecondaryIP)
-	} else {
-		info.Title("Provisioning static IP %s", args.PrimaryIP)
-	}
+	info.Title("Provisioning static IP %s", args.IpAddress)
 
-	if provisioned, err := n.setupNetworking(args.PrimaryIP, args.SecondaryIP, args.Password, args.Host); err != nil {
+	if provisioned, err := n.setupNetworking(args.IpAddress, args.Password); err != nil {
 		info.Fail()
 		return err
 	} else if provisioned {
@@ -83,36 +78,47 @@ func (n *networkingManager) connect(user, password, host string, port int, useSS
 	return nil
 }
 
-func (n *networkingManager) setupNetworking(primaryIP, secondaryIP net.IP, password, host string) (bool, error) {
-	wlan0Ip := secondaryIP
+func (n *networkingManager) setupNetworking(ipAddress net.IP, password string) (bool, error) {
 	// The lower the metric, the higher the priority
-	eth0Provisioned, err := n.provisionStaticIPIface(primaryIP, password, "eth0", host, 100)
+	eth0Provisioned, err := n.provisionStaticIPIface(ipAddress, password, "eth0", 100)
 	if err != nil {
 		return false, fmt.Errorf("error provisioning static IP for eth0: %w", err)
 	}
-	if !eth0Provisioned {
-		n.log.Warn().Msgf("eth0 not found, setting primary ip to wlan0 (%s)", primaryIP)
-		wlan0Ip = primaryIP
-	}
-	var wlan0Provisioned bool
 
-	if wlan0Ip != nil {
-		wlan0Provisioned, err = n.provisionStaticIPIface(wlan0Ip, password, "wlan0", host, 200)
-		if err != nil {
-			return false, fmt.Errorf("error provisioning static IP for wlan0: %w", err)
-		}
-	}
-
-	if !eth0Provisioned && !wlan0Provisioned {
-		return false, nil
-	}
-
-	err = n.rebootNetworkd(password)
+	wlan0Provisioned, err := n.provisionStaticIPIface(ipAddress, password, "wlan0", 200)
 	if err != nil {
-		return false, fmt.Errorf("error rebooting networkd service: %w", err)
+		return false, fmt.Errorf("error provisioning static IP for wlan0: %w", err)
 	}
 
-	return true, nil
+	rebooted := false
+	if eth0Provisioned || wlan0Provisioned {
+		err = n.restartNetworkManager(password)
+		if err != nil {
+			return false, fmt.Errorf("error restarting NetworkManager service: %w", err)
+		}
+		rebooted = true
+	}
+
+	// Delete old DHCP IPs
+	eth0Cleaned, err := n.deleteDhcpIps(password, "eth0", ipAddress)
+	if err != nil {
+		return false, fmt.Errorf("error deleting old DHCP IPs for eth0: %w", err)
+	}
+
+	wlan0Cleaned, err := n.deleteDhcpIps(password, "wlan0", ipAddress)
+	if err != nil {
+		return false, fmt.Errorf("error deleting old DHCP IPs for wlan0: %w", err)
+	}
+
+	if eth0Cleaned || wlan0Cleaned {
+		err = n.restartNetworkManager(password)
+		if err != nil {
+			return false, fmt.Errorf("error restarting NetworkManager service: %w", err)
+		}
+		rebooted = true
+	}
+
+	return rebooted, nil
 }
 
 func (n *networkingManager) getIfaceToConMap() (map[string]string, error) {
@@ -141,7 +147,7 @@ func (n *networkingManager) getIfaceToConMap() (map[string]string, error) {
 	return data, nil
 }
 
-func (n *networkingManager) provisionStaticIPIface(ip net.IP, password, iface, host string, metric int) (bool, error) {
+func (n *networkingManager) provisionStaticIPIface(ip net.IP, password, iface string, metric int) (bool, error) {
 	routerIP, err := n.getRouterIP()
 	if err != nil {
 		return false, fmt.Errorf("error getting router IP: %w", err)
@@ -167,15 +173,10 @@ func (n *networkingManager) provisionStaticIPIface(ip net.IP, password, iface, h
 		return false, fmt.Errorf("error updating network configuration: %w", err)
 	}
 
-	_, err = n.deleteDhcpIps(password, iface, host, ip)
-	if err != nil {
-		return false, fmt.Errorf("error deleting DHCP IPs: %w", err)
-	}
-
 	return true, nil
 }
 
-func (n *networkingManager) deleteDhcpIps(password, iface, host string, realIp net.IP) (bool, error) {
+func (n *networkingManager) deleteDhcpIps(password, iface string, realIp net.IP) (bool, error) {
 	routes, _, err := n.conn.Run("ip route")
 	if err != nil {
 		return false, fmt.Errorf("error getting IP routes: %w", err)
@@ -189,11 +190,6 @@ func (n *networkingManager) deleteDhcpIps(password, iface, host string, realIp n
 			// Avoid getting the gateway IP
 			parts := strings.Split(route, "dhcp")
 			result := ipRegexp.FindString(parts[1])
-
-			// Avoid deleting the current IP
-			if result == host {
-				continue
-			}
 			dhcpIps = append(dhcpIps, result)
 		}
 	}
@@ -233,7 +229,7 @@ func (n *networkingManager) getRouterIP() (net.IP, error) {
 	return net.ParseIP(splitted[2]), nil
 }
 
-func (n *networkingManager) rebootNetworkd(password string) error {
+func (n *networkingManager) restartNetworkManager(password string) error {
 	_, _, err := n.conn.RunSudoPassword("systemctl restart NetworkManager", password)
 	if err != nil {
 		return err

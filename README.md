@@ -40,8 +40,10 @@ Instructions to quickly have your raspberry pi up and running:
 2. Create pi user, enable ssh and setup wifi connection in the SD card -> use the [boot](#boot) command
 3. Insert the SD card in the raspberry and turn it on. Wait a couple minutes, as the first boot takes a while.
 4. Find the raspberry's IP address -> use the [find](#find) command
-5. Create deployer user, configure SSH, disable pi login and setup static IP -> use the [layer1](#layer1) command
-6. Update and upgrade packages, install some libraries, zsh, tailscale and docker -> use the [layer2](#layer2) command
+5. If you don't have a ssh key, create one with `ssh-keygen -t rsa`
+6. Create the authorized_keys file -> more info about its format in the [authorized-keys](#authorized-keys) docs
+7. Create deployer user, configure SSH, disable pi login and setup static IP -> use the [layer1](#layer1) command
+8. Update and upgrade packages, install some libraries, zsh, tailscale and docker -> use the [layer2](#layer2) command
 
 ## Problems & Solutions
 
@@ -218,21 +220,8 @@ $ rpi-provisioner authorized-keys --host 192.168.0.33 --keys-uri https://drive.g
 
 ### network
 
-```shell
-$ rpi-provisioner network --help
-Set up static ip for eth0 and wlan0.
+This command will add the new static IP addresses and then delete the old ones. You may be asked to restart the server to fully remove the old IP addresses. In that case, please run the network command again after restart to be sure that the old IP addresses are deleted.
 
-Usage:
-  rpi-provisioner network [flags]
+This commands configures the same IP Adress for all the network interfaces of the Raspberry Pi (eth0 and wlan0), but it gives priority to eth0. This means that if the ethernet cable is connected it will use it, otherwise it will use the wifi connection (both cases with the same IP address).
 
-Flags:
-  -h, --help              help for network
-      --host string       Server host
-      --ip ip             New IP
-      --password string   Login password
-      --port int          Server SSH port (default 22)
-      --ssh-key           Use ssh key
-      --user string       Login user
-```
-
-This commands just edits the dhcpd config to set an static IP Address for both eth0 and wlan0. It provisions the same IP Adress for both interfaces, but it gives priority to eth0.
+**Note: you can only set the static IP for eth0 if the ethernet cable is connected.**

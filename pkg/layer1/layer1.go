@@ -20,8 +20,7 @@ type Layer1Args struct {
 	Host             string
 	Port             int
 	KeysUri          string
-	PrimaryIP        net.IP
-	SecondaryIP      net.IP
+	IpAddress        net.IP
 }
 
 func NewManager() *layer1Manager {
@@ -135,13 +134,9 @@ func (m *layer1Manager) provisionLayer1(args Layer1Args) (bool, error) {
 		info.Skipped()
 	}
 
-	if len(args.PrimaryIP) > 0 {
-		if len(args.SecondaryIP) > 0 {
-			info.Title("Provisioning static IPs %s and %s", args.PrimaryIP, args.SecondaryIP)
-		} else {
-			info.Title("Provisioning static IP %s", args.PrimaryIP)
-		}
-		if provisioned, err := networking.SetupNetworking(m.conn, args.PrimaryIP, args.SecondaryIP, args.LoginPassword, args.Host); err != nil {
+	if len(args.IpAddress) > 0 {
+		info.Title("Provisioning static IP %s", args.IpAddress)
+		if provisioned, err := networking.SetupNetworking(m.conn, args.IpAddress, args.LoginPassword, args.Host); err != nil {
 			info.Fail()
 			return false, err
 		} else if provisioned {
