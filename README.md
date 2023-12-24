@@ -87,9 +87,6 @@ Each command has its own examples to show how to use it. For more information, u
 
 After flashing the raspbian ISO into the SD card, you must do some stuff before you can insert it into the raspberry.
 
-<!-- TODO: can this be executed multiple times? -->
-
-By default:
 The boot command will:
 
 - Enable ssh connections, as Raspbian doesn't enable ssh connection.
@@ -106,6 +103,8 @@ $ rpi-provisioner boot --wifi-ssid MOVISTAR_34XC --wifi-pass '7074Lly/R4nD0M' --
 # In Windows
 $ rpi-provisioner boot --wifi-ssid MOVISTAR_34XC --wifi-pass '7074Lly/R4nD0M' --hostname 'rpi-provisioner-example' E:/
 ```
+
+**Note: this command can only be executed one time - before the first boot. If you want to connect your raspberry to another interface, use the raspi-config command.**
 
 ### find
 
