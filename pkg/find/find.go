@@ -16,6 +16,7 @@ type Args struct {
 	UseSSHKey bool
 	Port      int
 }
+
 type Finder struct {
 	mu       sync.Mutex
 	wg       sync.WaitGroup

@@ -38,7 +38,10 @@ func NewLayer2Cmd() *cobra.Command {
 					"  To start the service, run the command again with the --ts-auth-key flag "+
 					"(+Info: https://login.tailscale.com/admin/settings/keys)\n"+
 					"  Or you can login manually and start the server:\n"+
-					"    ssh %s@%s sudo tailscale up\n", args.User, args.Host)
+					"    ssh %s@%s sudo tailscale up\n"+
+					"  If you want to let tailscale manage the ssh connections (you will lose the ssh connection):\n"+
+					"    ssh %s@%s sudo tailscale up --ssh --accept-risk=lose-ssh\n",
+					args.User, args.Host, args.User, args.Host)
 			}
 
 			fmt.Println("\nLayer 2 provisioned successfully")

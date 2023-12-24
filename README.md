@@ -19,11 +19,9 @@ Tested with image [`2023-12-11-raspios-bookworm-armhf-lite.img.xz`](https://down
 
 - [Raspberry Provisioner](#raspberry-provisioner)
   - [Quick start](#quick-start)
-  - [Problems \& Solutions](#problems--solutions)
-    - [SSH Access](#ssh-access)
-      - [Use tilescale only as VPN](#use-tilescale-only-as-vpn)
-      - [Use tilescale as VPN and SSH Proxy](#use-tilescale-as-vpn-and-ssh-proxy)
-    - [Networking](#networking)
+  - [SSH Access \& Tailscale](#ssh-access--tailscale)
+    - [Use tilescale only as VPN](#use-tilescale-only-as-vpn)
+    - [Use tilescale as VPN and SSH Proxy](#use-tilescale-as-vpn-and-ssh-proxy)
   - [Commands](#commands)
     - [boot](#boot)
     - [find](#find)
@@ -45,9 +43,7 @@ Instructions to quickly have your raspberry pi up and running:
 7. Create deployer user, configure SSH, disable pi login and setup static IP -> use the [layer1](#layer1) command
 8. Update and upgrade packages, install some libraries, zsh, tailscale and docker -> use the [layer2](#layer2) command
 
-## Problems & Solutions
-
-### SSH Access
+## SSH Access & Tailscale
 
 Even if you are unable to open the port 22 in your router, you can still access your raspberry via ssh. You just need to setup tilescale. There are two ways to do it:
 
@@ -56,13 +52,13 @@ Even if you are unable to open the port 22 in your router, you can still access 
 
 Both ways need you to have a tilescale account and have it installed in your PC. To install it in your raspberry, just use the `rpi-provisioner layer2` command.
 
-#### Use tilescale only as VPN
+### Use tilescale only as VPN
 
 Tailscale will create a virtual network interface in your PC. You can ssh into your raspberry using this interface. You can also use it to access your raspberry's services (like a web server) using the tailscale's IP address (or the alias) assigned to the raspberry.
 
 In this case, the raspberry will manage the SSH access. You will need to add your public ssh key to the raspberry's authorized_keys file. You can do it manually or using the [authorized-keys](#authorized-keys) command.
 
-#### Use tilescale as VPN and SSH Proxy
+### Use tilescale as VPN and SSH Proxy
 
 This option is similar as the previous one but in this case tailscale will manage the SSH access, not the raspberry. It's useful if you want to ssh from a PC that doesn't have your public ssh key.
 
@@ -73,10 +69,6 @@ sudo tailscale up --ssh --accept-risk=lose-ssh
 ```
 
 Keep in mind that running this command will close your current SSH connection.
-
-### Networking
-
-You will probably ssh often into your rapsberry pi, you chances are you want to setup a static IP address. It's really simple to do it, just use the [network](#network) command.
 
 ## Commands
 
@@ -116,14 +108,11 @@ Examples:
 
 ```shell
 # After executing the boot command, the user 'pi' will be created with password 'raspberry' (default values for the this command)
-# Use the --live option to see the valid hosts as soon as they are found instead of wait for the full scan to finish
-$ rpi-provisioner find --live
-
 # You can use this command after changing the user and limiting the access to use ssh keys
-$ rpi-provisioner find --live --user $USER --ssh-key
+$ rpi-provisioner find --user $USER --ssh-key
 
 # If for some reason you want to login with a different user and password (not the ssh key):
-$ rpi-provisioner find --live --user $USER --password $PASSWORD
+$ rpi-provisioner find --user $USER --password $PASSWORD
 ```
 
 More useful info:
