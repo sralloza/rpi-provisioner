@@ -18,6 +18,7 @@ Tested with image [`2023-12-11-raspios-bookworm-armhf-lite.img.xz`](https://down
 **Index:**
 
 - [Raspberry Provisioner](#raspberry-provisioner)
+  - [Install](#install)
   - [Quick start](#quick-start)
   - [SSH Access \& Tailscale](#ssh-access--tailscale)
     - [Use tilescale only as VPN](#use-tilescale-only-as-vpn)
@@ -29,6 +30,10 @@ Tested with image [`2023-12-11-raspios-bookworm-armhf-lite.img.xz`](https://down
     - [layer2](#layer2)
     - [authorized-keys](#authorized-keys)
     - [network](#network)
+
+## Install
+
+Download the latest version from the [releases page](https://github.com/sralloza/rpi-provisioner/releases) for your OS and architecture. Then, move it to a directory in your PATH.
 
 ## Quick start
 
