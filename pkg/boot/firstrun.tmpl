@@ -1,0 +1,70 @@
+#!/bin/bash
+
+set +e
+
+# Set up hostname
+CURRENT_HOSTNAME=`cat /etc/hostname | tr -d " \t\n\r"`
+if [ -f /usr/lib/raspberrypi-sys-mods/imager_custom ]; then
+   /usr/lib/raspberrypi-sys-mods/imager_custom set_hostname {{.Hostname}}
+else
+   echo {{.Hostname}} >/etc/hostname
+   sed -i "s/127.0.1.1.*$CURRENT_HOSTNAME/127.0.1.1\t{{.Hostname}}/g" /etc/hosts
+fi
+FIRSTUSER=`getent passwd 1000 | cut -d: -f1`
+FIRSTUSERHOME=`getent passwd 1000 | cut -d: -f6`
+NEW_FIRST_USER="pi"
+NEW_FIRST_USER_PASSWORD='$5$HJZCM0zQBW$j180ikBrviUrx.n4evIc1XhOSf.B58eeVZvZY68eIM1'
+
+# Set up first user
+if [ -f /usr/lib/userconf-pi/userconf ]; then
+   /usr/lib/userconf-pi/userconf $NEW_FIRST_USER $NEW_FIRST_USER_PASSWORD
+else
+   echo "$FIRSTUSER:$NEW_FIRST_USER_PASSWORD" | chpasswd -e
+   if [ "$FIRSTUSER" != "$NEW_FIRST_USER" ]; then
+      usermod -l "$NEW_FIRST_USER" "$FIRSTUSER"
+      usermod -m -d "/home/$NEW_FIRST_USER" "$NEW_FIRST_USER"
+      groupmod -n "$NEW_FIRST_USER" "$FIRSTUSER"
+      if grep -q "^autologin-user=" /etc/lightdm/lightdm.conf ; then
+         sed /etc/lightdm/lightdm.conf -i -e "s/^autologin-user=.*/autologin-user=$NEW_FIRST_USER/"
+      fi
+      if [ -f /etc/systemd/system/getty@tty1.service.d/autologin.conf ]; then
+         sed /etc/systemd/system/getty@tty1.service.d/autologin.conf -i -e "s/$FIRSTUSER/pi/"
+      fi
+      if [ -f /etc/sudoers.d/010_pi-nopasswd ]; then
+         sed -i "s/^$FIRSTUSER /$NEW_FIRST_USER /" /etc/sudoers.d/010_pi-nopasswd
+      fi
+   fi
+fi
+
+# Set up WiFi
+{{if and (.WifiSSID) (.WifiPass) }}
+if [ -f /usr/lib/raspberrypi-sys-mods/imager_custom ]; then
+   /usr/lib/raspberrypi-sys-mods/imager_custom set_wlan '{{.WifiSSID}}' '{{.WifiPass}}' '{{.WifiCountry}}'
+else
+cat >/etc/wpa_supplicant/wpa_supplicant.conf <<'WPAEOF'
+country={{.WifiCountry}}
+ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
+ap_scan=1
+
+update_config=1
+network={
+	ssid="{{.WifiSSID}}"
+	psk={{.WifiPass}}
+}
+
+WPAEOF
+   chmod 600 /etc/wpa_supplicant/wpa_supplicant.conf
+   rfkill unblock wifi
+   for filename in /var/lib/systemd/rfkill/*:wlan ; do
+       echo 0 > $filename
+   done
+fi
+{{ else }}
+# WiFi setup was skipped
+{{ end }}
+
+# Other stuff
+rm -f /boot/firstrun.sh
+mv /boot/firstrun.sh /boot/firstrun.sh.disabled
+sed -i 's| systemd.run.*||g' /boot/cmdline.txt
+exit 0

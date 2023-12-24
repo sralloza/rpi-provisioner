@@ -1,39 +1,24 @@
-# workflow name
-name: Generate release-artifacts
+name: Publish artifacts
 
-# on events
 on:
-  # push:
   release:
     types:
         - created
 
-# workflow tasks
 jobs:
-  generate:
-    name: Generate cross-platform builds
+  publish:
+    name: Publish artifacts
     runs-on: ubuntu-latest
-    env:
-      name: rpi-provisioner
     steps:
       - name: Checkout the repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v5
         with:
-          go-version: '^1.17.1'
+          go-version: '^1.21.4'
 
-      - name: Build for windows
-        run: GOOS=windows GOARCH=amd64 go build -o build/$name-windows-amd64.exe
-
-      - name: Build for linux amd64
-        run: GOOS=linux GOARCH=amd64 go build -o build/$name-linux-amd64
-
-      - name: Build for linux arm
-        run: GOOS=linux GOARCH=arm go build -o build/$name-linux-arm
-
-      - name: Build for darwin amd64
-        run: GOOS=darwin GOARCH=amd64 go build -o build/$name-darwin-amd64
+      - name: Build
+        run: make clean build
 
       - name: List files
         run: ls -l build

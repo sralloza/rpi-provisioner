@@ -1,238 +1,224 @@
-# Rpi-provisioner
+# Raspberry Provisioner
 
-_Have your raspberry pi ready to go using a couple commands._
+_Setup your Raspberry Pi with Raspbian without a screen, keyboard or ethernet connection._
 
-When your Raspberry Pi with all your projects dies it's a real pain to set it up again. Install your favourite shell, update all packagaes, set up the ssh connection, the static ip address...
+**Best features:**
 
-That's why this repo was created. The first version was created in Python, but the sudo password detection was really buggy, so now it's rewritten in go.
+- Setup your Raspberry Pi without a screen, keyboard or ethernet connection (WiFi connection required).
+- The router will assign a random IP address to the Raspberry Pi (DHCP protocol). You don't have to use nmap or open your router's admin panel to find the IP address, this command will find it.
+- Improve the security of your Raspberry Pi by creating a new user, disabling the default user and forcing the use of SSH keys.
+- Manage the authorized_keys file in your Raspberry Pi. You can use a local file, a file in S3 or a URL.
+- Setup a static IP address for your Raspberry Pi.
+- Install zsh and oh-my-zsh with some useful plugins.
+- Install tailscale to access your raspberry pi from anywhere.
+- Install docker and docker-compose to facilitate the deployment of your applications.
 
-## Problems & Solutions
+Tested with image [`2023-12-11-raspios-bookworm-armhf-lite.img.xz`](https://downloads.raspberrypi.com/raspios_lite_armhf/images/raspios_lite_armhf-2023-12-11/2023-12-11-raspios-bookworm-armhf-lite.img.xz)
 
-### Initial setup
+**Index:**
 
-What happens if you don't have an spare screen and keyboard? Don't worry, this script has your back. After flashing your raspbian image into your ssh card, execute the `boot` command. It will setup the ssh server and optionally a **wifi connection** to work the first time you turn your raspberry on. By default it will also add some lines to `cmdline.txt` to enable some features needed to run a k3s cluster. If you want to disable it, pass `--cmdline=""` to the `boot` command.
+- [Raspberry Provisioner](#raspberry-provisioner)
+  - [Install](#install)
+  - [Quick start](#quick-start)
+  - [SSH Access \& Tailscale](#ssh-access--tailscale)
+    - [Use tilescale only as VPN](#use-tilescale-only-as-vpn)
+    - [Use tilescale as VPN and SSH Proxy](#use-tilescale-as-vpn-and-ssh-proxy)
+  - [Commands](#commands)
+    - [boot](#boot)
+    - [find](#find)
+    - [layer1](#layer1)
+    - [layer2](#layer2)
+    - [authorized-keys](#authorized-keys)
+    - [network](#network)
 
-Note: you must pass the path of your sd card (the `BOOT_PATH` argument). In windows it will likely be `E:/`, `F:/` or something similar.
+## Install
 
-### Raspberry's initial IPv4
+Download the latest version from the [releases page](https://github.com/sralloza/rpi-provisioner/releases) for your OS and architecture. Then, move it to a directory in your PATH.
 
-When you plug in your raspberry after enabling ssh connection, you can't know what its IPv4 is unless you have a spare screen or you have access to your router's configuration.
+## Quick start
 
-This is where the `find` command comes in really handy. You only have to specify your network IP (like `--subnet=192.168.0.1/24` or `--subnet=10.0.0.1/24`). Well, in reality you don't have to even do this, because by default the program will get your local IP (excluding the WSL interface) and use it with a 24-bit mask to build your presumably network IP, so `LOCAL_IP/24`.
+Instructions to quickly have your raspberry pi up and running:
 
-There are some useful flags to make this command work, but the defaults will probably be just OK. For more info, refer to the [find command docs](#find).
+1. Flash ISO in memory card. Use a tool like [balenaEtcher](https://www.balena.io/etcher/) to do it.
+2. Create pi user, enable ssh and setup wifi connection in the SD card -> use the [boot](#boot) command
+3. Insert the SD card in the raspberry and turn it on. Wait a couple minutes, as the first boot takes a while.
+4. Find the raspberry's IP address -> use the [find](#find) command
+5. If you don't have a ssh key, create one with `ssh-keygen -t rsa`
+6. Create the authorized_keys file -> more info about its format in the [authorized-keys](#authorized-keys) docs
+7. Create deployer user, configure SSH, disable pi login and setup static IP -> use the [layer1](#layer1) command
+8. Update and upgrade packages, install some libraries, zsh, tailscale and docker -> use the [layer2](#layer2) command
 
-### SSH Keys management
+## SSH Access & Tailscale
 
-I have some PCs with ssh keys, so naturally I would want to be able to ssh into the Raspberry from any of my PCs.
+Even if you are unable to open the port 22 in your router, you can still access your raspberry via ssh. You just need to setup tilescale. There are two ways to do it:
 
-But, what happens if I change one key? Do I have to manually add the key to each Raspberry I have?
+1. Use tilescale only as VPN
+2. Use tilescale as VPN and SSH Proxy
 
-With this script, no. You just have to change your public ssh in the file. You just need to write your public ssh keys into a json file and upload it to an s3 bucket.
+Both ways need you to have a tilescale account and have it installed in your PC. To install it in your raspberry, just use the `rpi-provisioner layer2` command.
 
-Note: if you don't want to use AWS S3 to store your keys file, use the `--keys-path` command to specify the path to the file where you store your public keys.
+### Use tilescale only as VPN
 
-Example:
+Tailscale will create a virtual network interface in your PC. You can ssh into your raspberry using this interface. You can also use it to access your raspberry's services (like a web server) using the tailscale's IP address (or the alias) assigned to the raspberry.
 
-```json
-{
-  "key-id-1": "public-ssh-key-1",
-  "key-id-1": "public-ssh-key-1"
-}
+In this case, the raspberry will manage the SSH access. You will need to add your public ssh key to the raspberry's authorized_keys file. You can do it manually or using the [authorized-keys](#authorized-keys) command.
+
+### Use tilescale as VPN and SSH Proxy
+
+The only difference with the previous option is that when starting a SSH connection using the tailscale's IP address, tailscale will manage the access. This means you can ssh from a PC that doesn't have your public ssh key but needs to have tailscale installed. You can even ssh from a web browser using the [tailscale's web interface](https://login.tailscale.com/admin/machines).
+
+Keep in mind that when using the raspberry's real IP address, tailscale will not manage the access, so you will need to add your public ssh key to the raspberry's authorized_keys file.
+
+If you want to use this option, you will to start the tailscale daemon in your raspberry enabling ssh access:
+
+```shell
+sudo tailscale up --ssh --accept-risk=lose-ssh
 ```
 
-Then you set your AWS env vars (`AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`). If you don't have them, a simple google search will tell you how to generate them. You will need to tell the script where your file containing the public ssh keys is in AWS. You do it with the `--s3-path` flag: `--s3-path=<REGION>/<BUCKET_NAME>/<FILE_NAME>`. If you don't use this convention the script will complain and raise an error.
-
-We have covered how to store your public ssh keys. How can you update the ssh keys in your raspberry's authorized_keys? Simple, just use the [authorized-keys](#authorized-keys) command (or the [layer1](#layer1) command if you set up the raspberry for the first time).
-
-### Networking
-
-You will probably ssh often into your rapsberry pi, you chances are you want to setup a static IP address. It's really simple to do it, just use the [network](#network) command.
+Keep in mind that running this command will close your current SSH connection.
 
 ## Commands
 
+The commands are sorted by the order you will probably use them. Some functionality was seen to be useful outside its command, so it was extracted to a separate command (like [network](#network) or [authorized-keys](#authorized-keys)), which are at the end.
+
+Each command has its own examples to show how to use it. For more information, use the `--help` flag in any command.
+
 ### boot
 
+After flashing the raspbian ISO into the SD card, you must do some stuff before you can insert it into the raspberry.
+
+The boot command will:
+
+- Enable ssh connections, as Raspbian doesn't enable ssh connection.
+- Make the raspberry create the user `pi` with password `raspberry` during the first boot, as Raspbian doesn't add a default user.
+- Setup the WiFi connection (optional), so you can still use the raspberry in headless mode even if you don't have an ethernet connection.
+- Setup the raspberry hostname.
+
+Example:
+
 ```shell
-$ rpi-provisioner boot --help
-Enable ssh, modify cmdline.txt and setup wifi connection
+# In MacOS
+$ rpi-provisioner boot --wifi-ssid MOVISTAR_34XC --wifi-pass '7074Lly/R4nD0M' --hostname 'rpi-provisioner-example' /Volumes/bootfs
 
-Usage:
-  rpi-provisioner boot [BOOT_PATH] [flags]
-
-Flags:
-      --cmdline stringArray   Extra args to append to cmdline.txt (default [cgroup_enable=cpuset,cgroup_enable=memory,cgroup_memory=1])
-      --country string        Country code (2 digits) (default "ES")
-  -h, --help                  help for boot
-      --wifi-pass string      WiFi password
-      --wifi-ssid string      WiFi SSID
-
-Global Flags:
-      --debug   Enable debug
+# In Windows
+$ rpi-provisioner boot --wifi-ssid MOVISTAR_34XC --wifi-pass '7074Lly/R4nD0M' --hostname 'rpi-provisioner-example' E:/
 ```
+
+**Note: this command can only be executed one time - before the first boot. If you want to connect your raspberry to another interface, use the raspi-config command.**
 
 ### find
 
+This command will find your raspberry pi in your local network. It will try to connect to each host in your local network using SSH. If it is able to connect, it will print the host's IP address.
+
+Examples:
+
 ```shell
-$ rpi-provisioner find --help
-Find your raspberry pi in your local network using SSH.
+# After executing the boot command, the user 'pi' will be created with password 'raspberry' (default values for the this command)
+# You can use this command after changing the user and limiting the access to use ssh keys
+$ rpi-provisioner find --user $USER --ssh-key
 
-Usage:
-  rpi-provisioner find [flags]
-
-Flags:
-  -h, --help              help for find
-      --live              Print valid hosts right after found
-      --password string   Password to login via ssh (default "raspberry")
-      --port int          Port to connect via ssh (default 22)
-      --subnet string     Subnet to find the raspberry
-      --time              Show hosts processing time
-      --timeout int       Timeout in ns to wait in ssh connections (default 1)
-      --user string       User to login via ssh (default "pi")
-
-Global Flags:
-      --debug   Enable debug
+# If for some reason you want to login with a different user and password (not the ssh key):
+$ rpi-provisioner find --user $USER --password $PASSWORD
 ```
 
-More info:
+More useful info:
 
-- `--subnet`: this is the most important flag. You won't probably use it, but with this flag you can specify your local network's IP. If you left this blank, the program will try to generate it from your local IP address. If it is wrong, use this flag to really find your raspberry pi in your local network.
+- `--subnet`: this is the most important flag. You won't probably use it, but with this flag you can specify your local network's IP. If you left this blank, the program will try to generate it from your local IP address. If it is wrong, use this flag to really find your raspberry pi in your local network (and open an issue so it can be fixed).
 - `--live`: By default when you start the analysis, the valid raspberry's IP will only be shown at the end. You can use this flag to see as soon as it is discovered.
-- `--user & --password`: login user and password to use via SSH. The default credentials for raspbian are `pi:raspberry`, as the default values for each flag. If you use another OS you can use this flags to change it.
 - `--port`: just in case the default SSH port is not 22, use this flag to set it right.
-- `--time`: instead of showing `Done` when the scan finishes, it will display `Done (x seconds)`, showing the analysis time.
 - `--timeout`: Timeout in nanoseconds to wait in SSH connections. It is directly passed to the SSH Dial method. To be fair I don't really know if this works, so don't use it. By default is 1, but I don't know if it affects performance. If you know more about this flag, feel free to open an issue or a PR correcting the documentation.
-
-### authorized-keys
-
-```shell
-$ rpi-provisioner authorized-keys --help
-Download keys from the S3 bucket and update them.
-
-Usage:
-  rpi-provisioner authorized-keys [flags]
-
-Flags:
-  -h, --help               help for authorized-keys
-      --host string        Server host
-      --keys-path string   Local keys file path. You can select the public key file or a file containing multiple public keys.
-      --password string    Login password
-      --port int           Server SSH port (default 22)
-      --s3-path string     Amazon S3 path. Must match the pattern region/bucket/file
-      --ssh-key            Use ssh key
-      --user string        Login user
-
-Global Flags:
-      --debug   Enable debug
-```
-
-As said before, it will download the public ssh keys from AWS and update them. You can use ssh with an already valid ssh-key or the user's password. If you want to use your ssh key use the flag `--ssh-key`. It will get your private ssh key located at `~/.ssh/id_rsa` by default. Right now the private key path is not configurable. If you want to use the password to log in, use the `--password` flag.
-
-### network
-
-```shell
-$ rpi-provisioner network --help
-Set up static ip for eth0 and wlan0.
-
-Usage:
-  rpi-provisioner network [flags]
-
-Flags:
-  -h, --help              help for network
-      --host string       Server host
-      --ip ip             New IP
-      --password string   Login password
-      --port int          Server SSH port (default 22)
-      --ssh-key           Use ssh key
-      --user string       Login user
-
-Global Flags:
-      --debug   Enable debug
-```
-
-This commands just edits the dhcpd config to set an static IP Address for both eth0 and wlan0. It provisions the same IP Adress for both interfaces, but it gives priority to eth0.
 
 ### layer1
 
+The layer1 command will set up the _infrastructure_ or your raspberry pi (meaning only configuration, no libraries or programs).
+
+It will:
+
+- Create the deployer user (the user you will use to ssh into the raspberry)
+- Disable login with the pi user
+- Setup the ssh connection (add the ssh keys and disable any password login). For more information about the --keys-uri option, refer to the [authorized-keys](#authorized-keys) command.
+- Set up the static IP address (optional). For more information about the --primary-ip and the --secondary-ip options, refer to the [network](#network) command.
+
+Examples:
+
 ```shell
-$ rpi-provisioner layer1 --help
-Layer 1 uses the default user and bash shell. It will perform the following tasks:
- - Create deployer user
- - Set hostname
- - Setup ssh config and keys
- - Disable pi login
- - [optional] static ip configuration
-
-Usage:
-  rpi-provisioner layer1 [flags]
-
-Flags:
-      --deployer-password string   Deployer password
-      --deployer-user string       Deployer user
-  -h, --help                       help for layer1
-      --host string                Server host
-      --hostname string            Server hostname
-      --keys-path string           Local keys file path. You can select the public key file or a file containing multiple public keys.
-      --login-password string      Login password
-      --login-user string          Login user
-      --port int                   Server SSH port (default 22)
-      --root-password string       Root password
-      --s3-path string             Amazon S3 path. Must match the pattern region/bucket/file
-      --static-ip ip               Set up the static ip for eth0 and wlan0
-
-Global Flags:
-      --debug   Enable debug
+# Create the deployer user 'deployer' with password 'p422w0rD', update the authorized_keys and set the primary interface's IP address to 192.172.0.71 (the router assigned the raspberry initially the IP address 192.168.0.144 using DCHP)
+$ rpi-provisioner layer1 --deployer-user deployer --deployer-password p422w0rD --host 192.168.0.144 --keys-uri=/path/to/public-ssh-keys.json --primary-ip 192.168.0.71
 ```
+
+**Important: make sure that the authorized-keys file includes your public ssh key, otherwise you will lose SSH access to the raspberry.**
+
+**Note: this command is designed to be executed only once. It uses the login with user:password but it disables the password login, so the second time it's executed it will return an error during the connection. If you wish to setup the static IP address again please refer to the [network](#network) command.**
 
 ### layer2
 
-```shell
-$ rpi-provisioner layer2 --help
-Layer 2 uses the deployer user and bash. It will perform the following tasks:
+The layer2 command will install some useful libraries and programs. It will:
+
 - Update and upgrade packages
-- Install libraries: build-essential, cmake, cron, curl, git, libffi-dev, nano, python3-pip, python3, wget
-- Install fish
-- Install docker
+- Install some useful libraries
+- Install zsh
+- Install and configure oh-my-zsh
+- Install some useful oh-my-zsh plugins
+- Install and configure tailscale
+- Install docker (it will ensure that docker compose v2 is installed)
 
-Usage:
-  rpi-provisioner layer2 [flags]
-
-Flags:
-  -h, --help          help for layer2
-      --host string   Server host
-      --port int      Server SSH port (default 22)
-      --user string   Login user
-
-Global Flags:
-      --debug   Enable debug
-```
-
-## Examples of how I really use each command
-
-### boot example
+By default (without the option --ts-auth-key) the layer2 command will just install tailscale, showing a message at the end with more instructions about how to configure it.
 
 ```shell
-rpi-provisioner boot --wifi-ssid $WIFI_SSID --wifi-pass $WIFI_PASS E:/
+# Run the layer2 command in the host 192.168.0.71 using the user 'deployer' and the ssh key
+$ rpi-provisioner layer2 --host 192.168.0.71 --user deployer
+
+# Run the layer2 command configuring tailscale with a pregenerated auth key
+# You can generate the ssh-key from https://login.tailscale.com/admin/settings/keys
+$ rpi-provisioner layer2 --host 192.168.0.71 --user deployer --ts-auth-key s0m3-rand0m-7a1lscal3-k3y
 ```
 
-### find example
+### authorized-keys
+
+This command is used to update the authorized_keys file in the raspberry. It will join the current authorized_keys file with the keys in the file specified in the `--keys-uri` flag.
+
+The format of the file must be like this:
+
+```json
+[
+  {
+    "alias": "name-of-the-key",
+    "type": "ssh-rsa",
+    "key": "the-public-key"
+  }
+]
+```
+
+In this example, the key will be added in the authorized_keys as expected:
+
+```text
+ssh-rsa the-public-key name-of-the-key
+```
+
+The `--keys-uri` flag supports three formats:
+
+- As a local file: `--keys-uri=/path/to/public-ssh-keys.json`
+- As a S3 file: `--keys-uri=s3://<REGION>/<BUCKET_NAME>/<FILE_NAME>`
+- As a URL: `--keys-uri=https://example.com/public-ssh-keys.json`
+
+The recommended way is uploading the file to [Google Drive](https://drive.google.com) and getting the shareable link. Example: `--keys-uri https://drive.google.com/file/d/sfw3jirjoisdvx89werjkf/view?usp=sharing`. In reality this URL does not return the file exactly, but this command is smart enough to detect the Google Drive URL and process it correctly.
+
+**Make sure that the file includes your public ssh key, otherwise you will lose SSH access to the raspberry.**
 
 ```shell
-rpi-provisioner find --time --live
+# After launching the layer1 command, update the authorized_keys file (using the ssh key to login)
+$ rpi-provisioner authorized-keys --host 192.168.0.33 --keys-uri https://drive.google.com/... --ssh-key --user deployer
+
+# You can also update the authorized_keys for the pi user before the layer1 command
+$ rpi-provisioner authorized-keys --host 192.168.0.33 --keys-uri https://drive.google.com/... --user pi --password raspberry
 ```
 
-### authorized-keys example
+### network
 
-rpi-provisioner authorized-keys --ssh-key --host $RASPBERRY_IP --user $USER --s3-path $S3_REGION/$S3_BUCKET/$S3_FILE
+This command will add the new static IP addresses and then delete the old ones. You may be asked to restart the server to fully remove the old IP addresses. In that case, please run the network command again after restart to be sure that the old IP addresses are deleted.
 
-### layer1 example
+This commands configures the same IP Adress for all the network interfaces of the Raspberry Pi (eth0 and wlan0), but it gives priority to eth0. This means that if the ethernet cable is connected it will use it, otherwise it will use the wifi connection (both cases with the same IP address).
 
-```shell
-rpi-provisioner layer1 --deployer-user $NEW_USER --deployer-password $NEW_PASSWORD --host $RASPBERRY_IP --hostname $HOSTNAME --s3-path $S3_REGION/$S3_BUCKET/$S3_FILE
-```
+**Note: you can only set the static IP for eth0 if the ethernet cable is connected.**
 
-### layer2 example
-
-```shell
-rpi-provisioner layer2 --user $USER --host $RASPBERRY_IP
-```
+**Note: if you want to move the raspberry to another network, is recommended to remove the static IP addresses and let DHCP assign the IP address, because the new network might have a different IP address or your static IP address might be assigned to another device. Future releases of the `rpi-provisioner` command will support this.**

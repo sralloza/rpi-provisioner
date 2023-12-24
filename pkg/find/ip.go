@@ -1,8 +1,7 @@
-package cmd
+package find
 
 import (
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"net"
 )
@@ -84,7 +83,7 @@ func LocalIP() (net.IP, error) {
 		}
 	}
 
-	return nil, errors.New("error getting local IP")
+	return nil, fmt.Errorf("no valid interface found (out of %d possibles)", len(ifaces))
 }
 
 func isPrivateIP(ip net.IP) bool {
