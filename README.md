@@ -65,7 +65,9 @@ In this case, the raspberry will manage the SSH access. You will need to add you
 
 ### Use tilescale as VPN and SSH Proxy
 
-This option is similar as the previous one but in this case tailscale will manage the SSH access, not the raspberry. It's useful if you want to ssh from a PC that doesn't have your public ssh key.
+The only difference with the previous option is that when starting a SSH connection using the tailscale's IP address, tailscale will manage the access. This means you can ssh from a PC that doesn't have your public ssh key but needs to have tailscale installed. You can even ssh from a web browser using the [tailscale's web interface](https://login.tailscale.com/admin/machines).
+
+Keep in mind that when using the raspberry's real IP address, tailscale will not manage the access, so you will need to add your public ssh key to the raspberry's authorized_keys file.
 
 If you want to use this option, you will to start the tailscale daemon in your raspberry enabling ssh access:
 
@@ -219,3 +221,5 @@ This command will add the new static IP addresses and then delete the old ones. 
 This commands configures the same IP Adress for all the network interfaces of the Raspberry Pi (eth0 and wlan0), but it gives priority to eth0. This means that if the ethernet cable is connected it will use it, otherwise it will use the wifi connection (both cases with the same IP address).
 
 **Note: you can only set the static IP for eth0 if the ethernet cable is connected.**
+
+**Note: if you want to move the raspberry to another network, is recommended to remove the static IP addresses and let DHCP assign the IP address, because the new network might have a different IP address or your static IP address might be assigned to another device. Future releases of the `rpi-provisioner` command will support this.**
