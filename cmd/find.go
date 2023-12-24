@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 	"github.com/sralloza/rpi-provisioner/pkg/find"
 )
@@ -12,7 +14,10 @@ func NewFindCommand() *cobra.Command {
 		Short: "Find your raspberry pi in your local network",
 		Long:  `Find your raspberry pi in your local network using SSH.`,
 		RunE: func(cmd *cobra.Command, posArgs []string) error {
-			if err := find.FindHost(args); err != nil {
+			if !args.UseSSHKey && len(args.Password) == 0 {
+				return fmt.Errorf("must pass --ssh-key or --password")
+			}
+			if err := find.NewFinder().Run(args); err != nil {
 				return err
 			}
 			return nil

@@ -1,7 +1,6 @@
 package find
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -17,11 +16,19 @@ type Args struct {
 	UseSSHKey bool
 	Port      int
 }
+type Finder struct {
+	mu       sync.Mutex
+	wg       sync.WaitGroup
+	totalIPs []net.IP
+	validIPs []net.IP
+	findArgs Args
+}
 
-func FindHost(args Args) error {
-	if !args.UseSSHKey && len(args.Password) == 0 {
-		return errors.New("must pass --ssh-key or --password")
-	}
+func NewFinder() *Finder {
+	return &Finder{}
+}
+
+func (f *Finder) Run(args Args) error {
 	CIDR := args.Subnet
 	if CIDR == "" {
 		defaultCDIR, err := getDefaultCDIR()
@@ -40,20 +47,13 @@ func FindHost(args Args) error {
 
 	fmt.Printf("Zear IP addresses (user: %s)...\n", args.User)
 	start := time.Now()
-	finder := Finder{totalIPs: ipv4List, findArgs: args}
-	validIPs := finder.findValidSSHHosts()
+	f.findArgs = args
+	f.totalIPs = ipv4List
+	validIPs := f.findValidSSHHosts()
 
 	elapsed := time.Since(start)
 	fmt.Printf("Done (%s): %d valid hosts out of %d\n", elapsed, len(validIPs), len(ipv4List))
 	return nil
-}
-
-type Finder struct {
-	mu       sync.Mutex
-	wg       sync.WaitGroup
-	totalIPs []net.IP
-	validIPs []net.IP
-	findArgs Args
 }
 
 func (f *Finder) findValidSSHHosts() []net.IP {
