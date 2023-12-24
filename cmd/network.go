@@ -15,6 +15,8 @@ func NewNetworkingCmd() *cobra.Command {
 		Short: "Provision networking",
 		Long:  `Set up static ip for eth0 and wlan0.`,
 		RunE: func(cmd *cobra.Command, posArgs []string) error {
+			fmt.Print(networkWarning)
+
 			result, err := networking.NewNetworkingManager().Setup(args)
 			if err != nil {
 				return err

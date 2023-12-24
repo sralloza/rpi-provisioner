@@ -19,6 +19,10 @@ func NewLayer1Cmd() *cobra.Command {
  - [optional] static ip configuration
  `,
 		RunE: func(cmd *cobra.Command, posArgs []string) error {
+			if args.IpAddress != nil {
+				fmt.Print(networkWarning)
+			}
+
 			layer1Result, err := layer1.NewManager().Provision(args)
 			if err != nil {
 				return err

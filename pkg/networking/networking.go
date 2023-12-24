@@ -172,6 +172,7 @@ func (n *networkingManager) provisionStaticIPIface(ip net.IP, password, iface st
 		return false, fmt.Errorf("error getting router IP: %w", err)
 	}
 
+	// TODO: save the map in the struct so we don't have to call this function twice
 	ifaceToConMap, err := n.getIfaceToConMap()
 	if err != nil {
 		return false, fmt.Errorf("error getting map of devices to interfaces: %w", err)
@@ -183,6 +184,7 @@ func (n *networkingManager) provisionStaticIPIface(ip net.IP, password, iface st
 		return false, nil
 	}
 
+	// Check if the iface is already configured with the desired IP so we show SKIPPED
 	nmcliUpdateCmd := fmt.Sprintf(
 		"nmcli con mod %s ipv4.addresses %s/24 ipv4.gateway %s ipv4.dns 1.1.1.1 ipv4.method manual connection.autoconnect yes ipv4.route-metric %d",
 		conId, ip, routerIP, metric,

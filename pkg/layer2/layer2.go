@@ -121,9 +121,9 @@ func (m *layer2Manager) provisionLayer2(args Layer2Args) (Layer2Result, error) {
 
 	info.Title("Starting and setting up tailscale")
 	tailscaleStarted, needManualLogin, err := m.startAndSetupTailscale(args.TailscaleAuthKey)
+	result.NeedManualTailscaleLogin = needManualLogin
 	if err != nil {
 		info.Fail()
-		result.NeedManualTailscaleLogin = needManualLogin
 		return result, err
 	} else if tailscaleStarted {
 		info.Ok()
