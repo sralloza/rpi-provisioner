@@ -8,7 +8,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/sralloza/rpi-provisioner/pkg/info"
 	"github.com/sralloza/rpi-provisioner/pkg/logging"
-	"github.com/sralloza/rpi-provisioner/ssh"
+	"github.com/sralloza/rpi-provisioner/pkg/ssh"
 )
 
 type Layer2Args struct {

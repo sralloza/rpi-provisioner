@@ -8,7 +8,7 @@ import (
 	"github.com/sralloza/rpi-provisioner/pkg/authorizedkeys"
 	"github.com/sralloza/rpi-provisioner/pkg/info"
 	"github.com/sralloza/rpi-provisioner/pkg/networking"
-	"github.com/sralloza/rpi-provisioner/ssh"
+	"github.com/sralloza/rpi-provisioner/pkg/ssh"
 )
 
 type Layer1Args struct {

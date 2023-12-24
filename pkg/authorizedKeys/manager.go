@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/sralloza/rpi-provisioner/pkg/info"
-	"github.com/sralloza/rpi-provisioner/ssh"
+	"github.com/sralloza/rpi-provisioner/pkg/ssh"
 )
 
 type AuthorizedKeysArgs struct {

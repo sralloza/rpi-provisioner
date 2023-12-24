@@ -1,4 +1,4 @@
-package cmd
+package find
 
 import (
 	"encoding/binary"

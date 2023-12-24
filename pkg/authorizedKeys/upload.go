@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/sralloza/rpi-provisioner/ssh"
+	"github.com/sralloza/rpi-provisioner/pkg/ssh"
 )
 
 type UploadsshKeysArgs struct {
