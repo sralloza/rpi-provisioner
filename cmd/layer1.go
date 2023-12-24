@@ -24,6 +24,11 @@ func NewLayer1Cmd() *cobra.Command {
 				return err
 			}
 
+			if layer1Result.ConnectionError {
+				fmt.Println("\nSSH Connection error, layer 1 should be provisioned")
+				return nil
+			}
+
 			fmt.Println("\nLayer 1 provisioned successfully")
 			if layer1Result.NeedRestartForDHCPCleanup {
 				newHost := args.Host

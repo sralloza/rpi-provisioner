@@ -33,11 +33,14 @@ type layer1Manager struct {
 
 type Layer1Result struct {
 	NeedRestartForDHCPCleanup bool
+	// SSH Connection error, layer 1 should be provisioned
+	ConnectionError           bool
 }
 
 func (m *layer1Manager) Provision(args Layer1Args) (Layer1Result, error) {
 	result := Layer1Result{
 		NeedRestartForDHCPCleanup: false,
+		ConnectionError:           false,
 	}
 	address := fmt.Sprintf("%s:%d", args.Host, args.Port)
 
@@ -51,7 +54,7 @@ func (m *layer1Manager) Provision(args Layer1Args) (Layer1Result, error) {
 	if err != nil {
 		if strings.Contains(err.Error(), "no supported methods remain") {
 			info.Skipped()
-			fmt.Println("SSH Connection error, layer 1 should be provisioned")
+			result.ConnectionError = true
 			return result, nil
 		}
 		info.Fail()
