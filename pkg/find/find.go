@@ -46,7 +46,7 @@ func (f *Finder) Run(args Args) error {
 	}
 	fmt.Printf("Found %d IP addresses\n", len(ipv4List))
 
-	fmt.Printf("Zear IP addresses (user: %s)...\n", args.User)
+	fmt.Printf("Scanning IP addresses (user: %s)...\n", args.User)
 	start := time.Now()
 	f.findArgs = args
 	f.totalIPs = ipv4List
