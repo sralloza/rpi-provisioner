@@ -157,8 +157,8 @@ func (m *layer2Manager) installLibraries() error {
 	}
 
 	libraries := []string{
-		"build-essential",
 		"bat",
+		"build-essential",
 		"cmake",
 		"cron",
 		"curl",
@@ -166,6 +166,8 @@ func (m *layer2Manager) installLibraries() error {
 		"libffi-dev",
 		"mailutils",
 		"nano",
+		"ripgrep",
+		"sqlite3",
 		"tcpdump",
 		"wget",
 	}
@@ -327,6 +329,10 @@ func (m *layer2Manager) installDocker(args Layer2Args) (bool, error, error) {
 		_, _, err = m.conn.Run("docker compose")
 		if err != nil {
 			return false, nil, fmt.Errorf("docker is installed but docker compose v2 is not")
+		}
+		_, _, err := m.conn.Run("docker ps")
+		if err != nil {
+			return false, nil, fmt.Errorf("docker is installed but not running: %w", err)
 		}
 		return false, nil, nil
 	}
