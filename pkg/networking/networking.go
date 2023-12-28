@@ -146,7 +146,7 @@ func (n *networkingManager) getIfaceToConMap() (map[string]string, error) {
 		return nil, fmt.Errorf("error getting network interfaces: %w", err)
 	}
 
-	r := regexp.MustCompile(`([\w ]+)\s+([a-z0-9-]+)\s+(\w+)\s+(\w+)`)
+	r := regexp.MustCompile(`([\w ]+)\s+([a-z0-9-]+)\s+(\w+)\s+([\w-]+)`)
 
 	lines := strings.Split(stdout, "\n")
 	data := make(map[string]string)
@@ -156,9 +156,13 @@ func (n *networkingManager) getIfaceToConMap() (map[string]string, error) {
 		}
 		matches := r.FindStringSubmatch(line)
 		if len(matches) < 5 {
-			return nil, fmt.Errorf("error parsing network interfaces: %s", line)
+			return nil, fmt.Errorf("error parsing network interfaces: '%s'", line)
 		}
-
+		// Detect if the interface is not connected
+		if matches[4] == "--" {
+			n.log.Debug().Str("name", matches[3]).Str("uuid", matches[2]).Msg("Skipping connection, no device connected")
+			continue
+		}
 		data[matches[4]] = matches[2]
 	}
 
