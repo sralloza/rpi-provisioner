@@ -57,7 +57,7 @@ func (m *layer2Manager) getTailScaleStatus() (tailscaleStatus, error) {
 func (m *layer2Manager) tailscaleLogin(authKey string) error {
 	_, _, err := m.conn.RunSudo(fmt.Sprintf("tailscale login --auth-key %s", authKey))
 	if err != nil {
-		return fmt.Errorf("error logging in to tailscale: %w", err)
+		return fmt.Errorf("logging in to tailscale: %w", err)
 	}
 
 	return nil
@@ -66,7 +66,7 @@ func (m *layer2Manager) tailscaleLogin(authKey string) error {
 func (m *layer2Manager) tailscaleUp(user string) error {
 	_, _, err := m.conn.Run(fmt.Sprintf("tailscale up --operator=%s", user))
 	if err != nil {
-		return fmt.Errorf("error starting tailscale: %w", err)
+		return fmt.Errorf("starting tailscale: %w", err)
 	}
 
 	return nil
